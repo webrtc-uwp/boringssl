@@ -21,6 +21,13 @@
 #include <openssl/err.h>
 #include <openssl/evp.h>
 
+#ifdef WINRT
+//WinRT runtime doesn't support basic executables. Tests are using WinRT application as runner
+//and this project as a static library, so we need exclusive main function name.
+extern "C" int boringSSL_pbkdf_test_main(void);
+#define main boringSSL_pbkdf_test_main
+#endif
+
 
 // Prints out the data buffer as a sequence of hex bytes.
 static void PrintDataHex(const void *data, size_t len) {

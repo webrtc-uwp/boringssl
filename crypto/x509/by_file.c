@@ -89,12 +89,15 @@ static int by_file_ctrl(X509_LOOKUP *ctx, int cmd, const char *argp,
                         long argl, char **ret)
 {
     int ok = 0;
-    char *file;
+    char *file = NULL;
 
     switch (cmd) {
     case X509_L_FILE_LOAD:
         if (argl == X509_FILETYPE_DEFAULT) {
+// WinRT doesn't have environment variables.
+#if !defined(WINRT)
             file = (char *)getenv(X509_get_default_cert_file_env());
+#endif
             if (file)
                 ok = (X509_load_cert_crl_file(ctx, file,
                                               X509_FILETYPE_PEM) != 0);

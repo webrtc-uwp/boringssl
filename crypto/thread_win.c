@@ -16,9 +16,12 @@
 
 #if defined(OPENSSL_WINDOWS) && !defined(OPENSSL_NO_THREADS)
 
+#ifndef WINRT
+
 #pragma warning(push, 3)
 #include <windows.h>
 #pragma warning(pop)
+#endif // !WINRT
 
 #include <assert.h>
 #include <stdlib.h>
@@ -27,6 +30,22 @@
 #include <openssl/mem.h>
 #include <openssl/type_check.h>
 
+#ifdef WINRT
+#define InitializeCriticalSectionAndSpinCount(a,b) InitializeCriticalSectionEx(a, b, 0)
+
+typedef void(*init_t)(void *);
+BOOL CALLBACK CRYPTO_once_Callback(CRYPTO_once_t *InitOnce, PVOID Parameter, PVOID *Context)
+{
+  if (((PVOID*)Parameter)[0] != NULL)
+  {
+    init_t init = (init_t)((PVOID*)Parameter)[0];
+    void *arg = ((PVOID*)Parameter)[1];
+    init(arg);
+  }
+  
+  return TRUE;
+}
+#endif
 
 OPENSSL_COMPILE_ASSERT(sizeof(CRYPTO_MUTEX) >= sizeof(CRITICAL_SECTION),
                        CRYPTO_MUTEX_too_small);
@@ -38,7 +57,13 @@ union run_once_arg_t {
 
 static void run_once(CRYPTO_once_t *once, void (*init)(union run_once_arg_t),
                      union run_once_arg_t arg) {
-  /* Values must be aligned. */
+#ifdef WINRT
+    PVOID Parameter[2];
+    Parameter[0] = init;
+    Parameter[1] = arg.data;
+    InitOnceExecuteOnce(once, CRYPTO_once_Callback, Parameter, NULL);
+#else
+    /* Values must be aligned. */
   assert((((uintptr_t) once) & 3) == 0);
 
   /* This assumes that reading *once has acquire semantics. This should be true
@@ -76,6 +101,7 @@ static void run_once(CRYPTO_once_t *once, void (*init)(union run_once_arg_t),
         abort();
     }
   }
+#endif
 }
 
 static void call_once_init(union run_once_arg_t arg) {
@@ -146,7 +172,11 @@ static void thread_local_init(void) {
     g_thread_local_failed = 1;
     return;
   }
+#ifdef WINRT
+  g_thread_local_key = FlsAlloc(NULL);
+#else
   g_thread_local_key = TlsAlloc();
+#endif
   g_thread_local_failed = (g_thread_local_key == TLS_OUT_OF_INDEXES);
 }
 
@@ -161,7 +191,11 @@ static void NTAPI thread_local_destructor(PVOID module,
     return;
   }
 
-  void **pointers = (void**) TlsGetValue(g_thread_local_key);
+#ifdef WINRT
+  void **pointers = (void**) FlsGetValue(g_thread_local_key);
+#else
+  void **pointers = (void**)TlsGetValue(g_thread_local_key);
+#endif
   if (pointers == NULL) {
     return;
   }
@@ -193,7 +227,7 @@ static void NTAPI thread_local_destructor(PVOID module,
  * if it's not already there. (E.g. if __declspec(thread) is not used). Force
  * a reference to p_thread_callback_boringssl to prevent whole program
  * optimization from discarding the variable. */
-#ifdef _WIN64
+#if defined(_WIN64) || defined(_M_ARM)
 #pragma comment(linker, "/INCLUDE:_tls_used")
 #pragma comment(linker, "/INCLUDE:p_thread_callback_boringssl")
 #else
@@ -217,7 +251,7 @@ static void NTAPI thread_local_destructor(PVOID module,
  * to this variable with a linker /INCLUDE:symbol pragma to ensure that.) If
  * this variable is discarded, the OnThreadExit function will never be
  * called. */
-#ifdef _WIN64
+#if defined(_WIN64) || defined(_M_ARM)
 
 /* .CRT section is merged with .rdata on x64 so it must be constant data. */
 #pragma const_seg(".CRT$XLC")
@@ -243,7 +277,11 @@ void *CRYPTO_get_thread_local(thread_local_data_t index) {
     return NULL;
   }
 
+#ifdef WINRT
+  void **pointers = FlsGetValue(g_thread_local_key);
+#else
   void **pointers = TlsGetValue(g_thread_local_key);
+#endif
   if (pointers == NULL) {
     return NULL;
   }
@@ -258,7 +296,11 @@ int CRYPTO_set_thread_local(thread_local_data_t index, void *value,
     return 0;
   }
 
+#ifdef WINRT
+  void **pointers = FlsGetValue(g_thread_local_key);
+#else
   void **pointers = TlsGetValue(g_thread_local_key);
+#endif
   if (pointers == NULL) {
     pointers = OPENSSL_malloc(sizeof(void *) * NUM_OPENSSL_THREAD_LOCALS);
     if (pointers == NULL) {
@@ -266,7 +308,11 @@ int CRYPTO_set_thread_local(thread_local_data_t index, void *value,
       return 0;
     }
     memset(pointers, 0, sizeof(void *) * NUM_OPENSSL_THREAD_LOCALS);
+#ifdef WINRT
+    if (FlsSetValue(g_thread_local_key, pointers) == 0) {
+#else
     if (TlsSetValue(g_thread_local_key, pointers) == 0) {
+#endif
       OPENSSL_free(pointers);
       destructor(value);
       return 0;

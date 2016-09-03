@@ -211,6 +211,13 @@ static bool TestZeroPadding() {
   return true;
 }
 
+#ifdef WINRT
+// WinRT runtime doesn't support basic executables. Tests are using WinRT
+// application as runner and this project as a static library, so we need 
+// exclusive main function name.
+extern "C" int boringSSL_ec_test_main(void);
+#define main boringSSL_ec_test_main
+#endif
 static bool TestSpecifiedCurve() {
   // Test keys with specified curves may be decoded.
   ScopedEC_KEY key =

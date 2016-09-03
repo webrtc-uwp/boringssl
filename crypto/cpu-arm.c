@@ -30,7 +30,12 @@
  * Chromium builds is too old to have it. Instead we define all the constants
  * that we need and have a weak pointer to getauxval. */
 
+#if defined (WINRT)
+//getauxval is posix function, that is not available on Windows OS.
+unsigned long (*getauxval)(unsigned long type) = NULL;
+#else
 unsigned long getauxval(unsigned long type) __attribute__((weak));
+#endif
 
 extern uint32_t OPENSSL_armcap_P;
 

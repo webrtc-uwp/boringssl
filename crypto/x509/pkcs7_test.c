@@ -22,6 +22,12 @@
 #include <openssl/stack.h>
 #include <openssl/x509.h>
 
+#ifdef WINRT
+//WinRT runtime doesn't support basic executables. Tests are using WinRT application as runner
+//and this project as a static library, so we need exclusive main function name.
+#define main boringSSL_pkcs7_test_main
+#endif
+
 
 /* kPKCS7NSS contains the certificate chain of mail.google.com, as saved by NSS
  * using the Chrome UI. */

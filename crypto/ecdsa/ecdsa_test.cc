@@ -311,6 +311,13 @@ static bool TestBuiltin(FILE *out) {
   return true;
 }
 
+#ifdef WINRT
+// WinRT runtime doesn't support basic executables. Tests are using WinRT
+// application as runner and this project as a static library, so we need 
+// exclusive main function name.
+extern "C" int boringSSL_ecdsa_test_main(void);
+#define main boringSSL_ecdsa_test_main
+#endif
 static bool TestECDSA_SIG_max_len(size_t order_len) {
   /* Create the largest possible |ECDSA_SIG| of the given constraints. */
   ScopedECDSA_SIG sig(ECDSA_SIG_new());

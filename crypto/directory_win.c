@@ -85,11 +85,19 @@ const char *OPENSSL_DIR_read(OPENSSL_DIR_CTX **ctx, const char *directory) {
         }
       }
 
+#if defined(WINRT)
+      (*ctx)->handle = FindFirstFileEx(wdir, FindExInfoStandard, &(*ctx)->ctx, FindExSearchNameMatch, NULL, 0);
+#else
       (*ctx)->handle = FindFirstFile(wdir, &(*ctx)->ctx);
+#endif
 
       free(wdir);
     } else {
+#if defined(WINRT)
+      (*ctx)->handle = FindFirstFileEx((TCHAR *)directory, FindExInfoStandard, &(*ctx)->ctx, FindExSearchNameMatch, NULL, 0);
+#else
       (*ctx)->handle = FindFirstFile((TCHAR *)directory, &(*ctx)->ctx);
+#endif
     }
 
     if ((*ctx)->handle == INVALID_HANDLE_VALUE) {

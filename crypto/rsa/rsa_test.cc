@@ -806,6 +806,14 @@ static bool TestRecoverCRTParams() {
   return true;
 }
 
+#ifdef WINRT
+// WinRT runtime doesn't support basic executables. Tests are using WinRT
+// application as runner and this project as a static library, so we need
+// exclusive main function name.
+extern "C" int boringSSL_rsa_test_main(int argc, char *argv[]);
+#define main boringSSL_rsa_test_main
+#endif
+
 static bool TestASN1() {
   // Test that private keys may be decoded.
   ScopedRSA rsa(RSA_private_key_from_bytes(kKey1, sizeof(kKey1) - 1));
@@ -916,3 +924,4 @@ int main(int argc, char *argv[]) {
   printf("PASS\n");
   return 0;
 }
+

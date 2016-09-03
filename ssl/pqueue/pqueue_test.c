@@ -19,6 +19,12 @@
 #include <openssl/pqueue.h>
 #include <openssl/ssl.h>
 
+#ifdef WINRT
+//WinRT runtime doesn't support basic executables. Tests are using WinRT application as runner
+//and this project as a static library, so we need exclusive main function name.
+#define main boringSSL_pqueue_test_main
+#endif
+
 
 static void clear_and_free_queue(pqueue q) {
   for (;;) {

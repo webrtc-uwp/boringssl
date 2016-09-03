@@ -74,6 +74,14 @@ static bool RunBasicTests();
 static bool RunRFC5114Tests();
 static bool TestBadY();
 
+#ifdef WINRT
+// WinRT runtime doesn't support basic executables. Tests are using WinRT
+// application as runner and this project as a static library, so we need 
+// exclusive main function name.
+extern "C" int boringSSL_dh_test_main(int argc, char *argv[]);
+#define main boringSSL_dh_test_main
+#endif
+
 int main(int argc, char *argv[]) {
   CRYPTO_library_init();
 

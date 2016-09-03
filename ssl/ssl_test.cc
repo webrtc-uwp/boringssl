@@ -33,6 +33,14 @@
 #include "../crypto/test/test_util.h"
 
 
+#ifdef WINRT
+// WinRT runtime doesn't support basic executables. Tests are using WinRT
+// application as runner and this project as a static library, so we need
+// exclusive main function name.
+extern "C" int boringSSL_ssl_test_main(void);
+#define main boringSSL_ssl_test_main
+#endif
+
 struct ExpectedCipher {
   unsigned long id;
   int in_group_flag;

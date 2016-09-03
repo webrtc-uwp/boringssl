@@ -56,6 +56,12 @@
 #include "internal.h"
 #include "../test/test_util.h"
 
+#ifdef WINRT
+//WinRT runtime doesn't support basic executables. Tests are using WinRT application as runner
+//and this project as a static library, so we need exclusive main function name.
+#define main boringSSL_gcm_test_main
+#endif
+
 
 struct test_case {
   const char *key;

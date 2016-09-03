@@ -86,6 +86,14 @@
 #include "../crypto/test/scoped_types.h"
 #include "../crypto/test/test_util.h"
 
+#ifdef WINRT
+// WinRT runtime doesn't support basic executables. Tests are using WinRT
+// application as runner and this project as a static library, so we need
+// exclusive main function name.
+extern "C" int boringSSL_bn_test_main(int argc, char *argv[]);
+#define main boringSSL_bn_test_main
+#endif
+
 
 // This program tests the BIGNUM implementation. It takes an optional -bc
 // argument to write a transcript compatible with the UNIX bc utility.

@@ -19,6 +19,14 @@
 #include <openssl/crypto.h>
 #include <openssl/err.h>
 
+#ifdef WINRT
+// WinRT runtime doesn't support basic executables. Tests are using WinRT
+// application as runner and this project as a static library, so we need
+// exclusive main function name.
+extern "C" int boringSSL_base64_test_main(void);
+#define main boringSSL_base64_test_main
+#endif
+
 
 struct TestVector {
   const char *decoded;

@@ -72,6 +72,12 @@
 #include <openssl/ec.h>
 #include <openssl/obj.h>
 
+#ifdef WINRT
+//WinRT runtime doesn't support basic executables. Tests are using WinRT application as runner
+//and this project as a static library, so we need exclusive main function name.
+#define main boringSSL_example_mul_test_main
+#endif
+
 
 int example_EC_POINT_mul(void) {
   /* This example ensures that 10×∞ + G = G, in P-256. */

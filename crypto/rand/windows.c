@@ -27,6 +27,12 @@
  * "Community Additions" comment on MSDN here:
  * http://msdn.microsoft.com/en-us/library/windows/desktop/aa387694.aspx */
 #define SystemFunction036 NTAPI SystemFunction036
+
+// on WINRT Win10 WINAPI_FAMILY_ONECORE_APP causes NTSecAPI to not compile
+#ifdef WINRT
+#undef WINAPI_FAMILY_ONECORE_APP
+#endif
+
 #include <ntsecapi.h>
 #undef SystemFunction036
 
@@ -38,6 +44,8 @@
 void RAND_cleanup(void) {
 }
 
+// The WinRT implementation is in a c++ file.
+#if !defined(WINRT)
 void CRYPTO_sysrand(uint8_t *out, size_t requested) {
   while (requested > 0) {
     ULONG output_bytes_this_pass = ULONG_MAX;
@@ -52,5 +60,6 @@ void CRYPTO_sysrand(uint8_t *out, size_t requested) {
   }
   return;
 }
+#endif
 
 #endif  /* OPENSSL_WINDOWS */

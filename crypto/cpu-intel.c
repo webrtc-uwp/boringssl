@@ -236,7 +236,11 @@ void OPENSSL_cpuid_setup(void) {
   OPENSSL_ia32cap_P[3] = 0;
 
   const char *env1, *env2;
+#if defined(WINRT)
+  env1 = NULL;
+#else
   env1 = getenv("OPENSSL_ia32cap");
+#endif
   if (env1 == NULL) {
     return;
   }

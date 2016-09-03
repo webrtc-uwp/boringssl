@@ -80,6 +80,14 @@
 #include "../test/scoped_types.h"
 
 
+#ifdef WINRT
+// WinRT runtime doesn't support basic executables. Tests are using WinRT
+// application as runner and this project as a static library, so we need
+// exclusive main function name.
+extern "C" int boringSSL_evp_test_main(int argc, char *argv[]);
+#define main boringSSL_evp_test_main
+#endif
+
 // evp_test dispatches between multiple test types. PrivateKey tests take a key
 // name parameter and single block, decode it as a PEM private key, and save it
 // under that key name. Decrypt, Sign, and Verify tests take a previously

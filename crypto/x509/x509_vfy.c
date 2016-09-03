@@ -575,8 +575,11 @@ static int check_chain_extensions(X509_STORE_CTX *ctx)
          * A hack to keep people who don't want to modify their software
          * happy
          */
+// WinRT doesn't have environment variables.
+#if !defined(WINRT)
         if (getenv("OPENSSL_ALLOW_PROXY_CERTS"))
             allow_proxy_certs = 1;
+#endif
         purpose = ctx->param->purpose;
     }
 

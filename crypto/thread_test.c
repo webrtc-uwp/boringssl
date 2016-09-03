@@ -16,6 +16,12 @@
 
 #include <stdio.h>
 
+#ifdef WINRT
+//WinRT runtime doesn't support basic executables. Tests are using WinRT application as runner
+//and this project as a static library, so we need exclusive main function name.
+#define main boringSSL_thread_test_main
+#endif
+
 
 #if !defined(OPENSSL_NO_THREADS)
 
@@ -24,6 +30,11 @@
 #pragma warning(push, 3)
 #include <windows.h>
 #pragma warning(pop)
+
+#if defined(WINRT)
+// Some functions can be switch over to the ******Ex() version.
+#define WaitForSingleObject(a, b) WaitForSingleObjectEx(a, b, FALSE)
+#endif
 
 typedef HANDLE thread_t;
 

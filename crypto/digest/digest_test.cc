@@ -25,6 +25,14 @@
 
 #include "../test/scoped_types.h"
 
+#ifdef WINRT
+// WinRT runtime doesn't support basic executables. Tests are using WinRT
+// application as runner and this project as a static library, so we need
+// exclusive main function name.
+extern "C" int boringSSL_digest_test_main(void);
+#define main boringSSL_digest_test_main
+#endif
+
 
 struct MD {
   // name is the name of the digest.
