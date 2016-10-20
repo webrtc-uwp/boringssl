@@ -17,7 +17,7 @@
 
 #include <vector>
 
-#include <openssl/bytestring.h>
+#include <openssl/c++/bytestring.h>
 #include <openssl/crypto.h>
 #include <openssl/ec_key.h>
 #include <openssl/err.h>
@@ -25,6 +25,15 @@
 
 #include "../test/scoped_types.h"
 
+#ifdef WINRT
+// WinRT runtime doesn't support basic executables. Tests are using WinRT
+// application as runner and this project as a static library, so we need 
+// exclusive main function name.
+extern "C" int boringSSL_ec_test_main(void);
+#define main boringSSL_ec_test_main
+#endif //WINRT
+
+namespace bssl {
 
 // kECKeyWithoutPublic is an ECPrivateKey with the optional publicKey field
 // omitted.
@@ -122,7 +131,7 @@ static bool EncodeECPrivateKey(std::vector<uint8_t> *out, const EC_KEY *key) {
   return true;
 }
 
-bool Testd2i_ECPrivateKey() {
+static bool Testd2i_ECPrivateKey() {
   ScopedEC_KEY key = DecodeECPrivateKey(kECKeyWithoutPublic,
                                         sizeof(kECKeyWithoutPublic));
   if (!key) {
@@ -211,13 +220,6 @@ static bool TestZeroPadding() {
   return true;
 }
 
-#ifdef WINRT
-// WinRT runtime doesn't support basic executables. Tests are using WinRT
-// application as runner and this project as a static library, so we need 
-// exclusive main function name.
-extern "C" int boringSSL_ec_test_main(void);
-#define main boringSSL_ec_test_main
-#endif
 static bool TestSpecifiedCurve() {
   // Test keys with specified curves may be decoded.
   ScopedEC_KEY key =
@@ -356,21 +358,30 @@ static bool TestArbitraryCurve() {
       0xff, 0xff, 0xff, 0xff, 0xff, 0xbc, 0xe6, 0xfa, 0xad, 0xa7, 0x17,
       0x9e, 0x84, 0xf3, 0xb9, 0xca, 0xc2, 0xfc, 0x63, 0x25, 0x51,
   };
+  ScopedBN_CTX ctx(BN_CTX_new());
   ScopedBIGNUM p(BN_bin2bn(kP, sizeof(kP), nullptr));
   ScopedBIGNUM a(BN_bin2bn(kA, sizeof(kA), nullptr));
   ScopedBIGNUM b(BN_bin2bn(kB, sizeof(kB), nullptr));
-  ScopedBIGNUM x(BN_bin2bn(kX, sizeof(kX), nullptr));
-  ScopedBIGNUM y(BN_bin2bn(kY, sizeof(kY), nullptr));
+  ScopedBIGNUM gx(BN_bin2bn(kX, sizeof(kX), nullptr));
+  ScopedBIGNUM gy(BN_bin2bn(kY, sizeof(kY), nullptr));
   ScopedBIGNUM order(BN_bin2bn(kOrder, sizeof(kOrder), nullptr));
   ScopedBIGNUM cofactor(BN_new());
-  if (!p || !a || !b || !x || !y || !order || !cofactor ||
+  if (!ctx || !p || !a || !b || !gx || !gy || !order || !cofactor ||
       !BN_set_word(cofactor.get(), 1)) {
     return false;
   }
-  ScopedEC_GROUP group(EC_GROUP_new_arbitrary(p.get(), a.get(), b.get(),
-                                              x.get(), y.get(), order.get(),
-                                              cofactor.get()));
+
+  ScopedEC_GROUP group(
+      EC_GROUP_new_curve_GFp(p.get(), a.get(), b.get(), ctx.get()));
   if (!group) {
+    return false;
+  }
+  ScopedEC_POINT generator(EC_POINT_new(group.get()));
+  if (!generator ||
+      !EC_POINT_set_affine_coordinates_GFp(group.get(), generator.get(),
+                                           gx.get(), gy.get(), ctx.get()) ||
+      !EC_GROUP_set_generator(group.get(), generator.get(), order.get(),
+                              cofactor.get())) {
     return false;
   }
 
@@ -382,7 +393,8 @@ static bool TestArbitraryCurve() {
   // Copy |key| to |key2| using |group|.
   ScopedEC_KEY key2(EC_KEY_new());
   ScopedEC_POINT point(EC_POINT_new(group.get()));
-  if (!key2 || !point ||
+  ScopedBIGNUM x(BN_new()), y(BN_new());
+  if (!key2 || !point || !x || !y ||
       !EC_KEY_set_group(key2.get(), group.get()) ||
       !EC_KEY_set_private_key(key2.get(), EC_KEY_get0_private_key(key.get())) ||
       !EC_POINT_get_affine_coordinates_GFp(EC_KEY_get0_group(key.get()),
@@ -404,16 +416,78 @@ static bool TestArbitraryCurve() {
   return true;
 }
 
-int main(void) {
+static bool TestAddingEqualPoints(int nid) {
+  ScopedEC_KEY key(EC_KEY_new_by_curve_name(nid));
+  if (!key) {
+    return false;
+  }
+
+  const EC_GROUP *const group = EC_KEY_get0_group(key.get());
+
+  if (!EC_KEY_generate_key(key.get())) {
+    fprintf(stderr, "EC_KEY_generate_key failed with nid %d\n", nid);
+    ERR_print_errors_fp(stderr);
+    return false;
+  }
+
+  ScopedEC_POINT p1(EC_POINT_new(group));
+  ScopedEC_POINT p2(EC_POINT_new(group));
+  ScopedEC_POINT double_p1(EC_POINT_new(group));
+  ScopedEC_POINT p1_plus_p2(EC_POINT_new(group));
+  if (!p1 || !p2 || !double_p1 || !p1_plus_p2) {
+    return false;
+  }
+
+  if (!EC_POINT_copy(p1.get(), EC_KEY_get0_public_key(key.get())) ||
+      !EC_POINT_copy(p2.get(), EC_KEY_get0_public_key(key.get()))) {
+    fprintf(stderr, "EC_POINT_COPY failed with nid %d\n", nid);
+    ERR_print_errors_fp(stderr);
+    return false;
+  }
+
+  ScopedBN_CTX ctx(BN_CTX_new());
+  if (!ctx) {
+    return false;
+  }
+
+  if (!EC_POINT_dbl(group, double_p1.get(), p1.get(), ctx.get()) ||
+      !EC_POINT_add(group, p1_plus_p2.get(), p1.get(), p2.get(), ctx.get())) {
+    fprintf(stderr, "Point operation failed with nid %d\n", nid);
+    ERR_print_errors_fp(stderr);
+    return false;
+  }
+
+  if (EC_POINT_cmp(group, double_p1.get(), p1_plus_p2.get(), ctx.get()) != 0) {
+    fprintf(stderr, "A+A != 2A for nid %d", nid);
+    return false;
+  }
+
+  return true;
+}
+
+static bool ForEachCurve(bool (*test_func)(int nid)) {
+  const size_t num_curves = EC_get_builtin_curves(nullptr, 0);
+  std::vector<EC_builtin_curve> curves(num_curves);
+  EC_get_builtin_curves(curves.data(), num_curves);
+
+  for (const auto& curve : curves) {
+    if (!test_func(curve.nid)) {
+      fprintf(stderr, "Test failed for %s\n", curve.comment);
+      return false;
+    }
+  }
+
+  return true;
+}
+
+static int Main() {
   CRYPTO_library_init();
 
   if (!Testd2i_ECPrivateKey() ||
       !TestZeroPadding() ||
       !TestSpecifiedCurve() ||
-      !TestSetAffine(NID_secp224r1) ||
-      !TestSetAffine(NID_X9_62_prime256v1) ||
-      !TestSetAffine(NID_secp384r1) ||
-      !TestSetAffine(NID_secp521r1) ||
+      !ForEachCurve(TestSetAffine) ||
+      !ForEachCurve(TestAddingEqualPoints) ||
       !TestArbitraryCurve()) {
     fprintf(stderr, "failed\n");
     return 1;
@@ -421,4 +495,10 @@ int main(void) {
 
   printf("PASS\n");
   return 0;
+}
+
+}  // namespace bssl
+
+int main() {
+  return bssl::Main();
 }

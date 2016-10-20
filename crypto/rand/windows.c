@@ -14,12 +14,14 @@
 
 #include <openssl/rand.h>
 
-#if defined(OPENSSL_WINDOWS)
+#if defined(OPENSSL_WINDOWS) && !defined(BORINGSSL_UNSAFE_FUZZER_MODE)
+
+#ifndef WINRT
 
 #include <limits.h>
 #include <stdlib.h>
 
-#pragma warning(push, 3)
+OPENSSL_MSVC_PRAGMA(warning(push, 3))
 
 #include <windows.h>
 
@@ -27,30 +29,19 @@
  * "Community Additions" comment on MSDN here:
  * http://msdn.microsoft.com/en-us/library/windows/desktop/aa387694.aspx */
 #define SystemFunction036 NTAPI SystemFunction036
-
-// on WINRT Win10 WINAPI_FAMILY_ONECORE_APP causes NTSecAPI to not compile
-#ifdef WINRT
-#undef WINAPI_FAMILY_ONECORE_APP
-#endif
-
 #include <ntsecapi.h>
 #undef SystemFunction036
 
-#pragma warning(pop)
+OPENSSL_MSVC_PRAGMA(warning(pop))
 
 #include "internal.h"
 
 
-void RAND_cleanup(void) {
-}
-
-// The WinRT implementation is in a c++ file.
-#if !defined(WINRT)
 void CRYPTO_sysrand(uint8_t *out, size_t requested) {
   while (requested > 0) {
     ULONG output_bytes_this_pass = ULONG_MAX;
     if (requested < output_bytes_this_pass) {
-      output_bytes_this_pass = requested;
+      output_bytes_this_pass = (ULONG)requested;
     }
     if (RtlGenRandom(out, output_bytes_this_pass) == FALSE) {
       abort();
@@ -60,6 +51,7 @@ void CRYPTO_sysrand(uint8_t *out, size_t requested) {
   }
   return;
 }
-#endif
 
-#endif  /* OPENSSL_WINDOWS */
+#endif /* WINRT */
+
+#endif  /* OPENSSL_WINDOWS && !BORINGSSL_UNSAFE_FUZZER_MODE */

@@ -18,20 +18,22 @@
 #include <vector>
 
 #include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include <openssl/aead.h>
 #include <openssl/curve25519.h>
 #include <openssl/digest.h>
 #include <openssl/err.h>
-#include <openssl/obj.h>
+#include <openssl/newhope.h>
+#include <openssl/nid.h>
 #include <openssl/rand.h>
 #include <openssl/rsa.h>
 
 #if defined(OPENSSL_WINDOWS)
-#pragma warning(push, 3)
+OPENSSL_MSVC_PRAGMA(warning(push, 3))
 #include <windows.h>
-#pragma warning(pop)
+OPENSSL_MSVC_PRAGMA(warning(pop))
 #elif defined(OPENSSL_APPLE)
 #include <sys/time.h>
 #endif
@@ -86,10 +88,12 @@ static uint64_t time_now() {
 }
 #endif
 
+static uint64_t g_timeout_seconds = 1;
+
 static bool TimeFunction(TimeResults *results, std::function<bool()> func) {
-  // kTotalMS is the total amount of time that we'll aim to measure a function
+  // total_us is the total amount of time that we'll aim to measure a function
   // for.
-  static const uint64_t kTotalUS = 1000000;
+  const uint64_t total_us = g_timeout_seconds * 1000000;
   uint64_t start = time_now(), now, delta;
   unsigned done = 0, iterations_between_time_checks;
 
@@ -120,7 +124,7 @@ static bool TimeFunction(TimeResults *results, std::function<bool()> func) {
     }
 
     now = time_now();
-    if (now - start > kTotalUS) {
+    if (now - start > total_us) {
       break;
     }
   }
@@ -143,6 +147,9 @@ static bool SpeedRSA(const std::string &key_name, RSA *key,
   TimeResults results;
   if (!TimeFunction(&results,
                     [key, &sig, &fake_sha256_hash, &sig_len]() -> bool {
+        /* Usually during RSA signing we're using a long-lived |RSA| that has
+         * already had all of its |BN_MONT_CTX|s constructed, so it makes
+         * sense to use |key| directly here. */
         return RSA_sign(NID_sha256, fake_sha256_hash, sizeof(fake_sha256_hash),
                         sig.get(), &sig_len, key);
       })) {
@@ -154,6 +161,21 @@ static bool SpeedRSA(const std::string &key_name, RSA *key,
 
   if (!TimeFunction(&results,
                     [key, &fake_sha256_hash, &sig, sig_len]() -> bool {
+        /* Usually during RSA verification we have to parse an RSA key from a
+         * certificate or similar, in which case we'd need to construct a new
+         * RSA key, with a new |BN_MONT_CTX| for the public modulus. If we were
+         * to use |key| directly instead, then these costs wouldn't be
+         * accounted for. */
+        ScopedRSA verify_key(RSA_new());
+        if (!verify_key) {
+          return false;
+        }
+        verify_key->n = BN_dup(key->n);
+        verify_key->e = BN_dup(key->e);
+        if (!verify_key->n ||
+            !verify_key->e) {
+          return false;
+        }
         return RSA_verify(NID_sha256, fake_sha256_hash,
                           sizeof(fake_sha256_hash), sig.get(), sig_len, key);
       })) {
@@ -467,14 +489,109 @@ static bool Speed25519(const std::string &selected) {
   return true;
 }
 
-bool Speed(const std::vector<std::string> &args) {
-  std::string selected;
-  if (args.size() > 1) {
-    fprintf(stderr, "Usage: bssl speed [speed test selector, i.e. 'RNG']\n");
+static bool SpeedSPAKE2(const std::string &selected) {
+  if (!selected.empty() && selected.find("SPAKE2") == std::string::npos) {
+    return true;
+  }
+
+  TimeResults results;
+
+  static const uint8_t kAliceName[] = {'A'};
+  static const uint8_t kBobName[] = {'B'};
+  static const uint8_t kPassword[] = "password";
+  ScopedSPAKE2_CTX alice(SPAKE2_CTX_new(spake2_role_alice, kAliceName,
+                                        sizeof(kAliceName), kBobName,
+                                        sizeof(kBobName)));
+  uint8_t alice_msg[SPAKE2_MAX_MSG_SIZE];
+  size_t alice_msg_len;
+
+  if (!SPAKE2_generate_msg(alice.get(), alice_msg, &alice_msg_len,
+                           sizeof(alice_msg),
+                           kPassword, sizeof(kPassword))) {
+    fprintf(stderr, "SPAKE2_generate_msg failed.\n");
     return false;
   }
-  if (args.size() > 0) {
-    selected = args[0];
+
+  if (!TimeFunction(&results, [&alice_msg, alice_msg_len]() -> bool {
+        ScopedSPAKE2_CTX bob(SPAKE2_CTX_new(spake2_role_bob, kBobName,
+                                            sizeof(kBobName), kAliceName,
+                                            sizeof(kAliceName)));
+        uint8_t bob_msg[SPAKE2_MAX_MSG_SIZE], bob_key[64];
+        size_t bob_msg_len, bob_key_len;
+        if (!SPAKE2_generate_msg(bob.get(), bob_msg, &bob_msg_len,
+                                 sizeof(bob_msg), kPassword,
+                                 sizeof(kPassword)) ||
+            !SPAKE2_process_msg(bob.get(), bob_key, &bob_key_len,
+                                sizeof(bob_key), alice_msg, alice_msg_len)) {
+          return false;
+        }
+
+        return true;
+      })) {
+    fprintf(stderr, "SPAKE2 failed.\n");
+  }
+
+  results.Print("SPAKE2 over Ed25519");
+
+  return true;
+}
+
+static bool SpeedNewHope(const std::string &selected) {
+  if (!selected.empty() && selected.find("newhope") == std::string::npos) {
+    return true;
+  }
+
+  TimeResults results;
+  NEWHOPE_POLY *sk = NEWHOPE_POLY_new();
+  uint8_t acceptmsg[NEWHOPE_ACCEPTMSG_LENGTH];
+  RAND_bytes(acceptmsg, sizeof(acceptmsg));
+
+  if (!TimeFunction(&results, [sk, &acceptmsg]() -> bool {
+        uint8_t key[SHA256_DIGEST_LENGTH];
+        uint8_t offermsg[NEWHOPE_OFFERMSG_LENGTH];
+        NEWHOPE_offer(offermsg, sk);
+        if (!NEWHOPE_finish(key, sk, acceptmsg, NEWHOPE_ACCEPTMSG_LENGTH)) {
+          return false;
+        }
+        return true;
+      })) {
+    fprintf(stderr, "failed to exchange key.\n");
+    return false;
+  }
+
+  NEWHOPE_POLY_free(sk);
+  results.Print("newhope key exchange");
+  return true;
+}
+
+static const struct argument kArguments[] = {
+    {
+     "-filter", kOptionalArgument,
+     "A filter on the speed tests to run",
+    },
+    {
+     "-timeout", kOptionalArgument,
+     "The number of seconds to run each test for (default is 1)",
+    },
+    {
+     "", kOptionalArgument, "",
+    },
+};
+
+bool Speed(const std::vector<std::string> &args) {
+  std::map<std::string, std::string> args_map;
+  if (!ParseKeyValueArguments(&args_map, args, kArguments)) {
+    PrintUsage(kArguments);
+    return false;
+  }
+
+  std::string selected;
+  if (args_map.count("-filter") != 0) {
+    selected = args_map["-filter"];
+  }
+
+  if (args_map.count("-timeout") != 0) {
+    g_timeout_seconds = atoi(args_map["-timeout"].c_str());
   }
 
   RSA *key = RSA_private_key_from_bytes(kDERRSAPrivate2048,
@@ -546,7 +663,9 @@ bool Speed(const std::vector<std::string> &args) {
       !SpeedRandom(selected) ||
       !SpeedECDH(selected) ||
       !SpeedECDSA(selected) ||
-      !Speed25519(selected)) {
+      !Speed25519(selected) ||
+      !SpeedSPAKE2(selected) ||
+      !SpeedNewHope(selected)) {
     return false;
   }
 

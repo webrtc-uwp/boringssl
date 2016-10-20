@@ -15,7 +15,6 @@
 #include <stdio.h>
 #include <string.h>
 
-#include <openssl/bio.h>
 #include <openssl/crypto.h>
 #include <openssl/digest.h>
 #include <openssl/err.h>
@@ -26,7 +25,7 @@
 //and this project as a static library, so we need exclusive main function name.
 extern "C" int boringSSL_pbkdf_test_main(void);
 #define main boringSSL_pbkdf_test_main
-#endif
+#endif //WINRT
 
 
 // Prints out the data buffer as a sequence of hex bytes.

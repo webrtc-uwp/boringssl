@@ -53,7 +53,7 @@
 //WinRT runtime doesn't support basic executables. Tests are using WinRT application as runner
 //and this project as a static library, so we need exclusive main function name.
 #define main boringSSL_constant_time_test_main
-#endif
+#endif /* WINRT */
 
 
 static const unsigned int CONSTTIME_TRUE = (unsigned)(~0);

@@ -25,7 +25,7 @@
 // exclusive main function name.
 extern "C" int boringSSL_err_test_main(void);
 #define main boringSSL_err_test_main
-#endif
+#endif //WINRT
 
 
 static bool TestOverflow() {

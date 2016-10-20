@@ -69,7 +69,7 @@
 //WinRT runtime doesn't support basic executables. Tests are using WinRT application as runner
 //and this project as a static library, so we need exclusive main function name.
 #define main boringSSL_dsa_test_main
-#endif
+#endif /* WINRT */
 
 
 static int dsa_cb(int p, int n, BN_GENCB *arg);

@@ -16,11 +16,11 @@
 
 #if defined(OPENSSL_WINDOWS)
 
+#ifdef WINRT
+
 #include <limits.h>
 #include <stdlib.h>
 #include <Windows.h>
-
-#if defined(WINRT)
 
 using namespace Platform;
 using namespace Windows::Security::Cryptography;
@@ -35,6 +35,6 @@ extern "C" void CRYPTO_sysrand(uint8_t *out, size_t requested) {
   CryptographicBuffer::CopyToByteArray(buffer, &array);
   memcpy_s(out, requested, array->Data, requested);
 }
-#endif
+#endif // WINRT
 
 #endif  /* OPENSSL_WINDOWS */

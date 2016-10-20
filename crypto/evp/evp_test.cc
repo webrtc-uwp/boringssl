@@ -51,34 +51,30 @@
  * ====================================================================
  */
 
+#include <openssl/evp.h>
+
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 
-#if defined(_MSC_VER)
-#pragma warning(push)
-#pragma warning(disable: 4702)
-#endif
+OPENSSL_MSVC_PRAGMA(warning(push))
+OPENSSL_MSVC_PRAGMA(warning(disable: 4702))
 
 #include <map>
 #include <string>
 #include <utility>
 #include <vector>
 
-#if defined(_MSC_VER)
-#pragma warning(pop)
-#endif
+OPENSSL_MSVC_PRAGMA(warning(pop))
 
-#include <openssl/bytestring.h>
+#include <openssl/c++/bytestring.h>
 #include <openssl/crypto.h>
 #include <openssl/digest.h>
 #include <openssl/err.h>
-#include <openssl/evp.h>
 
 #include "../test/file_test.h"
 #include "../test/scoped_types.h"
-
 
 #ifdef WINRT
 // WinRT runtime doesn't support basic executables. Tests are using WinRT
@@ -86,7 +82,9 @@
 // exclusive main function name.
 extern "C" int boringSSL_evp_test_main(int argc, char *argv[]);
 #define main boringSSL_evp_test_main
-#endif
+#endif //WINRT
+
+namespace bssl {
 
 // evp_test dispatches between multiple test types. PrivateKey tests take a key
 // name parameter and single block, decode it as a PEM private key, and save it
@@ -264,7 +262,7 @@ static bool TestEVP(FileTest *t, void *arg) {
   return true;
 }
 
-int main(int argc, char **argv) {
+static int Main(int argc, char *argv[]) {
   CRYPTO_library_init();
   if (argc != 2) {
     fprintf(stderr, "%s <test file.txt>\n", argv[0]);
@@ -273,4 +271,10 @@ int main(int argc, char **argv) {
 
   KeyMap map;
   return FileTestMain(TestEVP, &map, argv[1]);
+}
+
+}  // namespace bssl
+
+int main(int argc, char *argv[]) {
+  return bssl::Main(argc, argv);
 }

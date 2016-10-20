@@ -22,6 +22,7 @@ elseif(UNIX)
   endif()
   set(ASM_EXT S)
   enable_language(ASM)
+  set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} -Wa,--noexecstack")
 else()
   if (CMAKE_CL_64)
     message("Using nasm")
@@ -40,7 +41,7 @@ endif()
 function(perlasm dest src)
   add_custom_command(
     OUTPUT ${dest}
-    COMMAND ${PERL_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/${src} ${PERLASM_STYLE} ${PERLASM_FLAGS} ${ARGN} > ${dest}
+    COMMAND ${PERL_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/${src} ${PERLASM_STYLE} ${PERLASM_FLAGS} ${ARGN} ${dest}
     DEPENDS
     ${src}
     ${PROJECT_SOURCE_DIR}/crypto/perlasm/arm-xlate.pl
@@ -52,39 +53,6 @@ function(perlasm dest src)
     WORKING_DIRECTORY .
   )
 endfunction()
-
-if (${ARCH} STREQUAL "x86_64")
-  set(
-    CRYPTO_ARCH_SOURCES
-
-    cpu-intel.c
-  )
-endif()
-
-if (${ARCH} STREQUAL "x86")
-  set(
-    CRYPTO_ARCH_SOURCES
-
-    cpu-intel.c
-  )
-endif()
-
-if (${ARCH} STREQUAL "arm")
-  set(
-    CRYPTO_ARCH_SOURCES
-
-    cpu-arm.c
-    cpu-arm-asm.S
-  )
-endif()
-
-if (${ARCH} STREQUAL "aarch64")
-  set(
-    CRYPTO_ARCH_SOURCES
-
-    cpu-arm.c
-  )
-endif()
 
 # Level 0.1 - depends on nothing outside this set.
 add_subdirectory(stack)
@@ -106,6 +74,7 @@ add_subdirectory(conf)
 add_subdirectory(chacha)
 add_subdirectory(poly1305)
 add_subdirectory(curve25519)
+add_subdirectory(newhope)
 
 # Level 1, depends only on 0.*
 add_subdirectory(digest)
@@ -143,9 +112,11 @@ add_subdirectory(test)
 add_library(
   crypto
 
+  cpu-aarch64-linux.c
+  cpu-arm.c
+  cpu-arm-linux.c
+  cpu-intel.c
   crypto.c
-  directory_posix.c
-  directory_win.c
   ex_data.c
   mem.c
   refcount_c11.c
@@ -155,8 +126,6 @@ add_library(
   thread_pthread.c
   thread_win.c
   time_support.c
-
-  ${CRYPTO_ARCH_SOURCES}
 
   $<TARGET_OBJECTS:stack>
   $<TARGET_OBJECTS:lhash>
@@ -196,7 +165,8 @@ add_library(
   $<TARGET_OBJECTS:pem>
   $<TARGET_OBJECTS:x509>
   $<TARGET_OBJECTS:x509v3>
-  $<TARGET_OBJECTS:pkcs8>
+  $<TARGET_OBJECTS:pkcs8_lib>
+  $<TARGET_OBJECTS:newhope>
 )
 
 if(NOT MSVC AND NOT ANDROID)

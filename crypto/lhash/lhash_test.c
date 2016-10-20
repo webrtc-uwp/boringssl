@@ -27,7 +27,7 @@
 //WinRT runtime doesn't support basic executables. Tests are using WinRT application as runner
 //and this project as a static library, so we need exclusive main function name.
 #define main boringSSL_lhash_test_main
-#endif
+#endif /* WINRT */
 
 struct dummy_lhash_node {
   char *s;
@@ -158,7 +158,11 @@ int main(int argc, char **argv) {
       case 1:
         s = rand_string();
         lh_insert(lh, (void **)&s1, s);
+#if defined(OPENSSL_WINDOWS)
+        dummy_lh_insert(&dummy_lh, &s2, _strdup(s));
+#else
         dummy_lh_insert(&dummy_lh, &s2, strdup(s));
+#endif
 
         if (s1 != NULL && (s2 == NULL || strcmp(s1, s2) != 0)) {
           fprintf(stderr, "lh_insert failure\n");

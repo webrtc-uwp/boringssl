@@ -64,16 +64,18 @@
 #if !defined(OPENSSL_NO_ASM) && (defined(OPENSSL_X86) || defined(OPENSSL_X86_64))
 
 #include <inttypes.h>
-#include <stdlib.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #if defined(OPENSSL_WINDOWS)
-#pragma warning(push, 3)
+OPENSSL_MSVC_PRAGMA(warning(push, 3))
 #include <immintrin.h>
 #include <intrin.h>
-#pragma warning(pop)
+OPENSSL_MSVC_PRAGMA(warning(pop))
 #endif
+
+#include "internal.h"
 
 
 /* OPENSSL_cpuid runs the cpuid instruction. |leaf| is passed in as EAX and ECX
@@ -236,11 +238,7 @@ void OPENSSL_cpuid_setup(void) {
   OPENSSL_ia32cap_P[3] = 0;
 
   const char *env1, *env2;
-#if defined(WINRT)
-  env1 = NULL;
-#else
   env1 = getenv("OPENSSL_ia32cap");
-#endif
   if (env1 == NULL) {
     return;
   }

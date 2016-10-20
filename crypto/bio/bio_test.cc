@@ -27,10 +27,10 @@
 #include <unistd.h>
 #else
 #include <io.h>
-#pragma warning(push, 3)
+OPENSSL_MSVC_PRAGMA(warning(push, 3))
 #include <winsock2.h>
 #include <ws2tcpip.h>
-#pragma warning(pop)
+OPENSSL_MSVC_PRAGMA(warning(pop))
 #endif
 
 #include <openssl/bio.h>
@@ -40,6 +40,7 @@
 
 #include <algorithm>
 
+#include "../internal.h"
 #include "../test/scoped_types.h"
 
 #ifdef WINRT
@@ -47,7 +48,7 @@
 //and this project as a static library, so we need exclusive main function name.
 extern "C" int boringSSL_bio_test_main(void);
 #define main boringSSL_bio_test_main
-#endif
+#endif //WINRT
 
 
 #if !defined(OPENSSL_WINDOWS)
@@ -213,9 +214,8 @@ static bool TestZeroCopyBioPairs() {
 
   // Transfer bytes from bio1_application_send_buffer to
   // bio2_application_recv_buffer in various ways.
-  for (size_t i = 0; i < sizeof(kLengths) / sizeof(kLengths[0]); i++) {
-    for (size_t j = 0; j < sizeof(kPartialLengths) / sizeof(kPartialLengths[0]);
-         j++) {
+  for (size_t i = 0; i < OPENSSL_ARRAY_SIZE(kLengths); i++) {
+    for (size_t j = 0; j < OPENSSL_ARRAY_SIZE(kPartialLengths); j++) {
       size_t total_write = 0;
       size_t total_read = 0;
 
@@ -300,7 +300,7 @@ static bool TestPrintf() {
     return false;
   }
 
-  for (size_t i = 0; i < sizeof(kLengths) / sizeof(kLengths[0]); i++) {
+  for (size_t i = 0; i < OPENSSL_ARRAY_SIZE(kLengths); i++) {
     char string[1024];
     if (kLengths[i] >= sizeof(string)) {
       fprintf(stderr, "Bad test string length\n");
@@ -338,7 +338,7 @@ static bool TestPrintf() {
 
 static bool ReadASN1(bool should_succeed, const uint8_t *data, size_t data_len,
                      size_t expected_len, size_t max_len) {
-  ScopedBIO bio(BIO_new_mem_buf(const_cast<uint8_t*>(data), data_len));
+  ScopedBIO bio(BIO_new_mem_buf(data, data_len));
 
   uint8_t *out;
   size_t out_len;
