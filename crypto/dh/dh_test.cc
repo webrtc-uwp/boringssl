@@ -85,7 +85,6 @@ static bool TestBadY();
 static bool TestASN1();
 static bool TestRFC3526();
 
-
 static int Main() {
   CRYPTO_library_init();
 
