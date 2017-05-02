@@ -46,8 +46,6 @@
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  * ==================================================================== */
 
-#ifndef OPENSSL_USE_BCRYPT
-
 #include <openssl/aes.h>
 
 #include <assert.h>
@@ -1142,5 +1140,3 @@ int AES_set_decrypt_key(const uint8_t *key, unsigned bits, AES_KEY *aeskey) {
 }
 
 #endif  /* OPENSSL_NO_ASM || (!OPENSSL_X86 && !OPENSSL_X86_64 && !OPENSSL_ARM) */
-
-#endif /* ndef OPENSSL_USE_BCRYPT */

@@ -46,8 +46,6 @@
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  * ==================================================================== */
 
-#ifndef OPENSSL_USE_BCRYPT
-
 #include <string.h>
 
 #include <openssl/aead.h>
@@ -1767,5 +1765,3 @@ int EVP_has_aes_hardware(void) {
   return 0;
 #endif
 }
-
-#endif /* ndef OPENSSL_USE_BCRYPT */
