@@ -46,8 +46,6 @@
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  * ==================================================================== */
 
-#ifndef OPENSSL_USE_BCRYPT
-
 #include <string.h>
 
 #include <openssl/aead.h>
@@ -63,6 +61,12 @@
 #include "internal.h"
 #include "../internal.h"
 #include "../modes/internal.h"
+
+#ifdef OPENSSL_USE_BCRYPT
+#ifndef OPENSSL_NO_ASM
+#define OPENSSL_NO_ASM
+#endif /* ndef OPENSSL_NO_ASM */
+#endif /* OPENSSL_USE_BCRYPT */
 
 #if defined(OPENSSL_ARM) || defined(OPENSSL_AARCH64)
 #include <openssl/arm_arch.h>
@@ -352,6 +356,13 @@ static int aes_init_key(EVP_CIPHER_CTX *ctx, const uint8_t *key,
   return 1;
 }
 
+static void aes_cleanup(EVP_CIPHER_CTX *c) {
+#ifdef OPENSSL_USE_BCRYPT
+  EVP_AES_GCM_CTX *gctx = c->cipher_data;
+  AES_clean_key(&(gctx->ks.ks));
+#endif /* OPENSSL_USE_BCRYPT */
+}
+
 static int aes_cbc_cipher(EVP_CIPHER_CTX *ctx, uint8_t *out, const uint8_t *in,
                           size_t len) {
   EVP_AES_KEY *dat = (EVP_AES_KEY *)ctx->cipher_data;
@@ -500,6 +511,9 @@ static int aes_gcm_init_key(EVP_CIPHER_CTX *ctx, const uint8_t *key,
 }
 
 static void aes_gcm_cleanup(EVP_CIPHER_CTX *c) {
+#ifdef OPENSSL_USE_BCRYPT
+  aes_cleanup(c);
+#endif /* OPENSSL_USE_BCRYPT */
   EVP_AES_GCM_CTX *gctx = c->cipher_data;
   OPENSSL_cleanse(&gctx->gcm, sizeof(gctx->gcm));
   if (gctx->iv != c->iv) {
@@ -730,25 +744,25 @@ static const EVP_CIPHER aes_128_cbc = {
     NID_aes_128_cbc,     16 /* block_size */, 16 /* key_size */,
     16 /* iv_len */,     sizeof(EVP_AES_KEY), EVP_CIPH_CBC_MODE,
     NULL /* app_data */, aes_init_key,        aes_cbc_cipher,
-    NULL /* cleanup */,  NULL /* ctrl */};
+    aes_cleanup /* cleanup */,  NULL /* ctrl */};
 
 static const EVP_CIPHER aes_128_ctr = {
     NID_aes_128_ctr,     1 /* block_size */,  16 /* key_size */,
     16 /* iv_len */,     sizeof(EVP_AES_KEY), EVP_CIPH_CTR_MODE,
     NULL /* app_data */, aes_init_key,        aes_ctr_cipher,
-    NULL /* cleanup */,  NULL /* ctrl */};
+    aes_cleanup /* cleanup */,  NULL /* ctrl */};
 
 static const EVP_CIPHER aes_128_ecb = {
     NID_aes_128_ecb,     16 /* block_size */, 16 /* key_size */,
     0 /* iv_len */,      sizeof(EVP_AES_KEY), EVP_CIPH_ECB_MODE,
     NULL /* app_data */, aes_init_key,        aes_ecb_cipher,
-    NULL /* cleanup */,  NULL /* ctrl */};
+    aes_cleanup /* cleanup */,  NULL /* ctrl */};
 
 static const EVP_CIPHER aes_128_ofb = {
     NID_aes_128_ofb128,  1 /* block_size */,  16 /* key_size */,
     16 /* iv_len */,     sizeof(EVP_AES_KEY), EVP_CIPH_OFB_MODE,
     NULL /* app_data */, aes_init_key,        aes_ofb_cipher,
-    NULL /* cleanup */,  NULL /* ctrl */};
+    aes_cleanup /* cleanup */,  NULL /* ctrl */};
 
 static const EVP_CIPHER aes_128_gcm = {
     NID_aes_128_gcm, 1 /* block_size */, 16 /* key_size */, 12 /* iv_len */,
@@ -764,19 +778,19 @@ static const EVP_CIPHER aes_192_cbc = {
     NID_aes_192_cbc,     16 /* block_size */, 24 /* key_size */,
     16 /* iv_len */,     sizeof(EVP_AES_KEY), EVP_CIPH_CBC_MODE,
     NULL /* app_data */, aes_init_key,        aes_cbc_cipher,
-    NULL /* cleanup */,  NULL /* ctrl */};
+    aes_cleanup /* cleanup */,  NULL /* ctrl */};
 
 static const EVP_CIPHER aes_192_ctr = {
     NID_aes_192_ctr,     1 /* block_size */,  24 /* key_size */,
     16 /* iv_len */,     sizeof(EVP_AES_KEY), EVP_CIPH_CTR_MODE,
     NULL /* app_data */, aes_init_key,        aes_ctr_cipher,
-    NULL /* cleanup */,  NULL /* ctrl */};
+    aes_cleanup /* cleanup */,  NULL /* ctrl */};
 
 static const EVP_CIPHER aes_192_ecb = {
     NID_aes_192_ecb,     16 /* block_size */, 24 /* key_size */,
     0 /* iv_len */,      sizeof(EVP_AES_KEY), EVP_CIPH_ECB_MODE,
     NULL /* app_data */, aes_init_key,        aes_ecb_cipher,
-    NULL /* cleanup */,  NULL /* ctrl */};
+    aes_cleanup /* cleanup */,  NULL /* ctrl */};
 
 static const EVP_CIPHER aes_192_gcm = {
     NID_aes_192_gcm, 1 /* block_size */, 24 /* key_size */, 12 /* iv_len */,
@@ -792,25 +806,25 @@ static const EVP_CIPHER aes_256_cbc = {
     NID_aes_256_cbc,     16 /* block_size */, 32 /* key_size */,
     16 /* iv_len */,     sizeof(EVP_AES_KEY), EVP_CIPH_CBC_MODE,
     NULL /* app_data */, aes_init_key,        aes_cbc_cipher,
-    NULL /* cleanup */,  NULL /* ctrl */};
+    aes_cleanup /* cleanup */,  NULL /* ctrl */};
 
 static const EVP_CIPHER aes_256_ctr = {
     NID_aes_256_ctr,     1 /* block_size */,  32 /* key_size */,
     16 /* iv_len */,     sizeof(EVP_AES_KEY), EVP_CIPH_CTR_MODE,
     NULL /* app_data */, aes_init_key,        aes_ctr_cipher,
-    NULL /* cleanup */,  NULL /* ctrl */};
+    aes_cleanup /* cleanup */,  NULL /* ctrl */};
 
 static const EVP_CIPHER aes_256_ecb = {
     NID_aes_256_ecb,     16 /* block_size */, 32 /* key_size */,
     0 /* iv_len */,      sizeof(EVP_AES_KEY), EVP_CIPH_ECB_MODE,
     NULL /* app_data */, aes_init_key,        aes_ecb_cipher,
-    NULL /* cleanup */,  NULL /* ctrl */};
+    aes_cleanup /* cleanup */,  NULL /* ctrl */};
 
 static const EVP_CIPHER aes_256_ofb = {
     NID_aes_256_ofb128,  1 /* block_size */,  32 /* key_size */,
     16 /* iv_len */,     sizeof(EVP_AES_KEY), EVP_CIPH_OFB_MODE,
     NULL /* app_data */, aes_init_key,        aes_ofb_cipher,
-    NULL /* cleanup */,  NULL /* ctrl */};
+    aes_cleanup /* cleanup */,  NULL /* ctrl */};
 
 static const EVP_CIPHER aes_256_gcm = {
     NID_aes_256_gcm, 1 /* block_size */, 32 /* key_size */, 12 /* iv_len */,
@@ -1095,6 +1109,9 @@ static int aead_aes_gcm_init(EVP_AEAD_CTX *ctx, const uint8_t *key,
 
 static void aead_aes_gcm_cleanup(EVP_AEAD_CTX *ctx) {
   struct aead_aes_gcm_ctx *gcm_ctx = ctx->aead_state;
+#ifdef OPENSSL_USE_BCRYPT
+  AES_clean_key(&(gcm_ctx->ks.ks));
+#endif /* OPENSSL_USE_BCRYPT */
   OPENSSL_cleanse(gcm_ctx, sizeof(struct aead_aes_gcm_ctx));
   OPENSSL_free(gcm_ctx);
 }
@@ -1572,6 +1589,9 @@ static int aead_aes_ctr_hmac_sha256_init(EVP_AEAD_CTX *ctx, const uint8_t *key,
 
 static void aead_aes_ctr_hmac_sha256_cleanup(EVP_AEAD_CTX *ctx) {
   struct aead_aes_ctr_hmac_sha256_ctx *aes_ctx = ctx->aead_state;
+#ifdef OPENSSL_USE_BCRYPT
+  AES_clean_key(&(aes_ctx->ks.ks));
+#endif /* OPENSSL_USE_BCRYPT */
   OPENSSL_cleanse(aes_ctx, sizeof(struct aead_aes_ctr_hmac_sha256_ctx));
   OPENSSL_free(aes_ctx);
 }
@@ -1759,6 +1779,9 @@ const EVP_AEAD *EVP_aead_aes_256_ctr_hmac_sha256(void) {
 }
 
 int EVP_has_aes_hardware(void) {
+#if OPENSSL_USE_BCRYPT
+  return 1;
+#else
 #if defined(OPENSSL_X86) || defined(OPENSSL_X86_64)
   return aesni_capable() && crypto_gcm_clmul_enabled();
 #elif defined(OPENSSL_ARM) || defined(OPENSSL_AARCH64)
@@ -1766,6 +1789,5 @@ int EVP_has_aes_hardware(void) {
 #else
   return 0;
 #endif
+#endif /* OPENSSL_USE_BCRYPT */
 }
-
-#endif /* ndef OPENSSL_USE_BCRYPT */

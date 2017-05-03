@@ -67,11 +67,19 @@ extern "C" {
 
 #define AES_BLOCK_SIZE 16
 
+#ifdef OPENSSL_USE_BCRYPT
+struct aes_key_bcrypt_st;
+#endif /* OPENSSL_USE_BCRYPT */
+
+
 /* aes_key_st should be an opaque type, but EVP requires that the size be
  * known. */
 struct aes_key_st {
   uint32_t rd_key[4 * (AES_MAXNR + 1)];
   unsigned rounds;
+#ifdef OPENSSL_USE_BCRYPT
+  struct aes_key_bcrypt_st *bcrypt;
+#endif /* OPENSSL_USE_BCRYPT */
 };
 typedef struct aes_key_st AES_KEY;
 
@@ -100,6 +108,12 @@ OPENSSL_EXPORT void AES_encrypt(const uint8_t *in, uint8_t *out,
  * and |out| pointers may overlap. */
 OPENSSL_EXPORT void AES_decrypt(const uint8_t *in, uint8_t *out,
                                 const AES_KEY *key);
+
+#ifdef OPENSSL_USE_BCRYPT
+/* AES_clean_key cleans a key previously set with  AES_set_encrypt_key or
+ * AES_set_decrypt_key. */
+OPENSSL_EXPORT void AES_clean_key(AES_KEY *aeskey);
+#endif /* OPENSSL_USE_BCRYPT */
 
 
 /* Block cipher modes. */
