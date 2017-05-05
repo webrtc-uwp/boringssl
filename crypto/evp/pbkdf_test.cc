@@ -20,12 +20,7 @@
 #include <openssl/err.h>
 #include <openssl/evp.h>
 
-#ifdef WINRT
-//WinRT runtime doesn't support basic executables. Tests are using WinRT application as runner
-//and this project as a static library, so we need exclusive main function name.
-extern "C" int boringSSL_pbkdf_test_main(void);
-#define main boringSSL_pbkdf_test_main
-#endif //WINRT
+#include "../internal.h"
 
 
 // Prints out the data buffer as a sequence of hex bytes.
@@ -56,7 +51,7 @@ static bool TestPBKDF2(const void *password, size_t password_len,
     return false;
   }
 
-  if (memcmp(key, expected_key, key_len) != 0) {
+  if (OPENSSL_memcmp(key, expected_key, key_len) != 0) {
     fprintf(stderr, "Resulting key material does not match expectation\n");
     fprintf(stderr, "Expected:\n    ");
     PrintDataHex(expected_key, key_len);

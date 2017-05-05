@@ -56,18 +56,53 @@
 
 #include <openssl/ssl.h>
 
+#include <assert.h>
 #include <string.h>
 
 #include <openssl/buf.h>
 
+#include "../crypto/internal.h"
 #include "internal.h"
 
 
-static uint16_t ssl3_version_from_wire(uint16_t wire_version) {
-  return wire_version;
+static int ssl3_version_from_wire(uint16_t *out_version,
+                                  uint16_t wire_version) {
+  switch (wire_version) {
+    case SSL3_VERSION:
+    case TLS1_VERSION:
+    case TLS1_1_VERSION:
+    case TLS1_2_VERSION:
+      *out_version = wire_version;
+      return 1;
+    case TLS1_3_DRAFT_VERSION:
+      *out_version = TLS1_3_VERSION;
+      return 1;
+  }
+
+  return 0;
 }
 
-static uint16_t ssl3_version_to_wire(uint16_t version) { return version; }
+static uint16_t ssl3_version_to_wire(uint16_t version) {
+  switch (version) {
+    case SSL3_VERSION:
+    case TLS1_VERSION:
+    case TLS1_1_VERSION:
+    case TLS1_2_VERSION:
+      return version;
+    case TLS1_3_VERSION:
+      return TLS1_3_DRAFT_VERSION;
+  }
+
+  /* It is an error to use this function with an invalid version. */
+  assert(0);
+  return 0;
+}
+
+static int ssl3_supports_cipher(const SSL_CIPHER *cipher) { return 1; }
+
+static void ssl3_expect_flight(SSL *ssl) {}
+
+static void ssl3_received_flight(SSL *ssl) {}
 
 static int ssl3_set_read_state(SSL *ssl, SSL_AEAD_CTX *aead_ctx) {
   if (ssl->s3->rrec.length != 0) {
@@ -78,7 +113,7 @@ static int ssl3_set_read_state(SSL *ssl, SSL_AEAD_CTX *aead_ctx) {
     return 0;
   }
 
-  memset(ssl->s3->read_sequence, 0, sizeof(ssl->s3->read_sequence));
+  OPENSSL_memset(ssl->s3->read_sequence, 0, sizeof(ssl->s3->read_sequence));
 
   SSL_AEAD_CTX_free(ssl->s3->aead_read_ctx);
   ssl->s3->aead_read_ctx = aead_ctx;
@@ -86,7 +121,7 @@ static int ssl3_set_read_state(SSL *ssl, SSL_AEAD_CTX *aead_ctx) {
 }
 
 static int ssl3_set_write_state(SSL *ssl, SSL_AEAD_CTX *aead_ctx) {
-  memset(ssl->s3->write_sequence, 0, sizeof(ssl->s3->write_sequence));
+  OPENSSL_memset(ssl->s3->write_sequence, 0, sizeof(ssl->s3->write_sequence));
 
   SSL_AEAD_CTX_free(ssl->s3->aead_write_ctx);
   ssl->s3->aead_write_ctx = aead_ctx;
@@ -102,7 +137,7 @@ static const SSL_PROTOCOL_METHOD kTLSProtocolMethod = {
     ssl3_new,
     ssl3_free,
     ssl3_get_message,
-    ssl3_hash_current_message,
+    ssl3_get_current_message,
     ssl3_release_current_message,
     ssl3_read_app_data,
     ssl3_read_change_cipher_spec,
@@ -112,8 +147,10 @@ static const SSL_PROTOCOL_METHOD kTLSProtocolMethod = {
     ssl3_supports_cipher,
     ssl3_init_message,
     ssl3_finish_message,
-    ssl3_write_message,
-    ssl3_send_change_cipher_spec,
+    ssl3_add_message,
+    ssl3_add_change_cipher_spec,
+    ssl3_add_alert,
+    ssl3_flush_flight,
     ssl3_expect_flight,
     ssl3_received_flight,
     ssl3_set_read_state,
@@ -124,6 +161,7 @@ const SSL_METHOD *TLS_method(void) {
   static const SSL_METHOD kMethod = {
       0,
       &kTLSProtocolMethod,
+      &ssl_crypto_x509_method,
   };
   return &kMethod;
 }
@@ -138,6 +176,7 @@ const SSL_METHOD *TLSv1_2_method(void) {
   static const SSL_METHOD kMethod = {
       TLS1_2_VERSION,
       &kTLSProtocolMethod,
+      &ssl_crypto_x509_method,
   };
   return &kMethod;
 }
@@ -146,6 +185,7 @@ const SSL_METHOD *TLSv1_1_method(void) {
   static const SSL_METHOD kMethod = {
       TLS1_1_VERSION,
       &kTLSProtocolMethod,
+      &ssl_crypto_x509_method,
   };
   return &kMethod;
 }
@@ -154,6 +194,7 @@ const SSL_METHOD *TLSv1_method(void) {
   static const SSL_METHOD kMethod = {
       TLS1_VERSION,
       &kTLSProtocolMethod,
+      &ssl_crypto_x509_method,
   };
   return &kMethod;
 }
@@ -162,6 +203,7 @@ const SSL_METHOD *SSLv3_method(void) {
   static const SSL_METHOD kMethod = {
       SSL3_VERSION,
       &kTLSProtocolMethod,
+      &ssl_crypto_x509_method,
   };
   return &kMethod;
 }
@@ -215,3 +257,24 @@ const SSL_METHOD *TLS_server_method(void) {
 const SSL_METHOD *TLS_client_method(void) {
   return TLS_method();
 }
+
+static void ssl_noop_x509_clear(CERT *cert) {}
+static void ssl_noop_x509_flush_cached_leaf(CERT *cert) {}
+static void ssl_noop_x509_flush_cached_chain(CERT *cert) {}
+static int ssl_noop_x509_session_cache_objects(SSL_SESSION *sess) {
+  return 1;
+}
+static int ssl_noop_x509_session_dup(SSL_SESSION *new_session,
+                                       const SSL_SESSION *session) {
+  return 1;
+}
+static void ssl_noop_x509_session_clear(SSL_SESSION *session) {}
+
+const SSL_X509_METHOD ssl_noop_x509_method = {
+  ssl_noop_x509_clear,
+  ssl_noop_x509_flush_cached_chain,
+  ssl_noop_x509_flush_cached_leaf,
+  ssl_noop_x509_session_cache_objects,
+  ssl_noop_x509_session_dup,
+  ssl_noop_x509_session_clear,
+};

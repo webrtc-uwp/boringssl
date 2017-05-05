@@ -60,13 +60,16 @@
 #include <openssl/err.h>
 #include <openssl/mem.h>
 
+#include "../bn/internal.h"
 #include "../ec/internal.h"
+#include "../internal.h"
 
 
 int ECDSA_sign(int type, const uint8_t *digest, size_t digest_len, uint8_t *sig,
-               unsigned int *sig_len, EC_KEY *eckey) {
+               unsigned int *sig_len, const EC_KEY *eckey) {
   if (eckey->ecdsa_meth && eckey->ecdsa_meth->sign) {
-    return eckey->ecdsa_meth->sign(digest, digest_len, sig, sig_len, eckey);
+    return eckey->ecdsa_meth->sign(digest, digest_len, sig, sig_len,
+                                   (EC_KEY*) eckey /* cast away const */);
   }
 
   return ECDSA_sign_ex(type, digest, digest_len, sig, sig_len, NULL, NULL,
@@ -74,7 +77,7 @@ int ECDSA_sign(int type, const uint8_t *digest, size_t digest_len, uint8_t *sig,
 }
 
 int ECDSA_verify(int type, const uint8_t *digest, size_t digest_len,
-                 const uint8_t *sig, size_t sig_len, EC_KEY *eckey) {
+                 const uint8_t *sig, size_t sig_len, const EC_KEY *eckey) {
   ECDSA_SIG *s;
   int ret = 0;
   uint8_t *der = NULL;
@@ -88,7 +91,7 @@ int ECDSA_verify(int type, const uint8_t *digest, size_t digest_len,
   /* Defend against potential laxness in the DER parser. */
   size_t der_len;
   if (!ECDSA_SIG_to_bytes(&der, &der_len, s) ||
-      der_len != sig_len || memcmp(sig, der, sig_len) != 0) {
+      der_len != sig_len || OPENSSL_memcmp(sig, der, sig_len) != 0) {
     /* This should never happen. crypto/bytestring is strictly DER. */
     OPENSSL_PUT_ERROR(ECDSA, ERR_R_INTERNAL_ERROR);
     goto err;
@@ -131,12 +134,12 @@ static int digest_to_bn(BIGNUM *out, const uint8_t *digest, size_t digest_len,
 }
 
 ECDSA_SIG *ECDSA_do_sign(const uint8_t *digest, size_t digest_len,
-                         EC_KEY *key) {
+                         const EC_KEY *key) {
   return ECDSA_do_sign_ex(digest, digest_len, NULL, NULL, key);
 }
 
 int ECDSA_do_verify(const uint8_t *digest, size_t digest_len,
-                    const ECDSA_SIG *sig, EC_KEY *eckey) {
+                    const ECDSA_SIG *sig, const EC_KEY *eckey) {
   int ret = 0;
   BN_CTX *ctx;
   BIGNUM *u1, *u2, *m, *X;
@@ -222,7 +225,7 @@ err:
   return ret;
 }
 
-static int ecdsa_sign_setup(EC_KEY *eckey, BN_CTX *ctx_in, BIGNUM **kinvp,
+static int ecdsa_sign_setup(const EC_KEY *eckey, BN_CTX *ctx_in, BIGNUM **kinvp,
                             BIGNUM **rp, const uint8_t *digest,
                             size_t digest_len) {
   BN_CTX *ctx = NULL;
@@ -308,12 +311,9 @@ static int ecdsa_sign_setup(EC_KEY *eckey, BN_CTX *ctx_in, BIGNUM **kinvp,
   } while (BN_is_zero(r));
 
   /* Compute the inverse of k. The order is a prime, so use Fermat's Little
-   * Theorem. */
-  if (!BN_set_word(tmp, 2) ||
-      !BN_sub(tmp, order, tmp) ||
-      /* Note |ec_group_get_mont_data| may return NULL but |BN_mod_exp_mont|
-       * allows it to be. */
-      !BN_mod_exp_mont(k, k, tmp, order, ctx, ec_group_get_mont_data(group))) {
+   * Theorem. Note |ec_group_get_mont_data| may return NULL but
+   * |bn_mod_inverse_prime| allows this. */
+  if (!bn_mod_inverse_prime(k, k, order, ctx, ec_group_get_mont_data(group))) {
     OPENSSL_PUT_ERROR(ECDSA, ERR_R_BN_LIB);
     goto err;
   }
@@ -339,13 +339,14 @@ err:
   return ret;
 }
 
-int ECDSA_sign_setup(EC_KEY *eckey, BN_CTX *ctx, BIGNUM **kinv, BIGNUM **rp) {
+int ECDSA_sign_setup(const EC_KEY *eckey, BN_CTX *ctx, BIGNUM **kinv,
+                     BIGNUM **rp) {
   return ecdsa_sign_setup(eckey, ctx, kinv, rp, NULL, 0);
 }
 
 ECDSA_SIG *ECDSA_do_sign_ex(const uint8_t *digest, size_t digest_len,
                             const BIGNUM *in_kinv, const BIGNUM *in_r,
-                            EC_KEY *eckey) {
+                            const EC_KEY *eckey) {
   int ok = 0;
   BIGNUM *kinv = NULL, *s, *m = NULL, *tmp = NULL;
   const BIGNUM *ckinv;
@@ -442,7 +443,7 @@ err:
 
 int ECDSA_sign_ex(int type, const uint8_t *digest, size_t digest_len,
                   uint8_t *sig, unsigned int *sig_len, const BIGNUM *kinv,
-                  const BIGNUM *r, EC_KEY *eckey) {
+                  const BIGNUM *r, const EC_KEY *eckey) {
   int ret = 0;
   ECDSA_SIG *s = NULL;
 

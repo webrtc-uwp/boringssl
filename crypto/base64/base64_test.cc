@@ -115,8 +115,7 @@ static std::string RemoveNewlines(const char *in) {
   std::string ret;
   const size_t in_len = strlen(in);
 
-  size_t i;
-  for (i = 0; i < in_len; i++) {
+  for (size_t i = 0; i < in_len; i++) {
     if (in[i] != '\n') {
       ret.push_back(in[i]);
     }
@@ -145,7 +144,7 @@ static bool TestEncodeBlock() {
 
     std::string encoded(RemoveNewlines(t->encoded));
     if (len != encoded.size() ||
-        memcmp(out, encoded.data(), len) != 0) {
+        OPENSSL_memcmp(out, encoded.data(), len) != 0) {
       fprintf(stderr, "encode(\"%s\") = \"%.*s\", want \"%s\"\n",
               t->decoded, (int)len, (const char*)out, encoded.c_str());
       return false;
@@ -187,7 +186,7 @@ static bool TestDecodeBase64() {
       }
 
       if (len != strlen(t->decoded) ||
-          memcmp(out, t->decoded, len) != 0) {
+          OPENSSL_memcmp(out, t->decoded, len) != 0) {
         fprintf(stderr, "decode(\"%s\") = \"%.*s\", want \"%s\"\n",
                 encoded.c_str(), (int)len, (const char*)out, t->decoded);
         return false;
@@ -226,7 +225,7 @@ static bool TestDecodeBlock() {
       ret -= 3 - (expected_len % 3);
     }
     if (static_cast<size_t>(ret) != strlen(t->decoded) ||
-        memcmp(out, t->decoded, ret) != 0) {
+        OPENSSL_memcmp(out, t->decoded, ret) != 0) {
       fprintf(stderr, "decode(\"%s\") = \"%.*s\", want \"%s\"\n",
               t->encoded, ret, (const char*)out, t->decoded);
       return false;
@@ -267,7 +266,8 @@ static bool TestEncodeDecode() {
       EVP_EncodeFinal(&ctx, out + total, &out_len);
       total += out_len;
 
-      if (total != strlen(t->encoded) || memcmp(out, t->encoded, total) != 0) {
+      if (total != strlen(t->encoded) ||
+          OPENSSL_memcmp(out, t->encoded, total) != 0) {
         fprintf(stderr, "#%u: EVP_EncodeUpdate produced different output: '%s' (%u)\n",
                 test_num, out, static_cast<unsigned>(total));
         return false;
@@ -296,7 +296,8 @@ static bool TestEncodeDecode() {
           fprintf(stderr, "#%u: EVP_DecodeUpdate failed\n", test_num);
           return false;
         }
-        if (total != decoded_len || memcmp(out, t->decoded, decoded_len)) {
+        if (total != decoded_len ||
+            OPENSSL_memcmp(out, t->decoded, decoded_len)) {
           fprintf(stderr, "#%u: EVP_DecodeUpdate produced incorrect output\n",
                   test_num);
           return false;
@@ -377,7 +378,7 @@ static bool TestDecodeUpdateStreaming() {
       out_len += bytes_written;
 
       if (out_len != strlen(t->decoded) ||
-          memcmp(out.data(), t->decoded, out_len) != 0) {
+          OPENSSL_memcmp(out.data(), t->decoded, out_len) != 0) {
         fprintf(stderr, "#%u: incorrect output\n", test_num);
         return 0;
       }

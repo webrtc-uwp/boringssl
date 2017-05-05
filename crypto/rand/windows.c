@@ -14,9 +14,7 @@
 
 #include <openssl/rand.h>
 
-#if defined(OPENSSL_WINDOWS) && !defined(BORINGSSL_UNSAFE_FUZZER_MODE)
-
-#ifndef WINRT
+#if defined(OPENSSL_WINDOWS) && !defined(BORINGSSL_UNSAFE_DETERMINISTIC_MODE)
 
 #include <limits.h>
 #include <stdlib.h>
@@ -52,6 +50,4 @@ void CRYPTO_sysrand(uint8_t *out, size_t requested) {
   return;
 }
 
-#endif /* WINRT */
-
-#endif  /* OPENSSL_WINDOWS && !BORINGSSL_UNSAFE_FUZZER_MODE */
+#endif  /* OPENSSL_WINDOWS && !BORINGSSL_UNSAFE_DETERMINISTIC_MODE */

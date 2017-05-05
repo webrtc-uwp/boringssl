@@ -22,7 +22,7 @@
 #include <openssl/stack.h>
 #include <openssl/x509.h>
 
-#include "../test/test_util.h"
+#include "../internal.h"
 
 #ifdef WINRT
 //WinRT runtime doesn't support basic executables. Tests are using WinRT application as runner
@@ -526,7 +526,7 @@ static int test_cert_reparse(const uint8_t *der_bytes, size_t der_len) {
   }
 
   if (result_len != result2_len ||
-      memcmp(result_data, result2_data, result_len) != 0) {
+      OPENSSL_memcmp(result_data, result2_data, result_len) != 0) {
     fprintf(stderr, "Serialisation is not stable.\n");
     return 0;
   }
@@ -590,7 +590,7 @@ static int test_crl_reparse(const uint8_t *der_bytes, size_t der_len) {
   }
 
   if (result_len != result2_len ||
-      memcmp(result_data, result2_data, result_len) != 0) {
+      OPENSSL_memcmp(result_data, result2_data, result_len) != 0) {
     fprintf(stderr, "Serialisation is not stable.\n");
     return 0;
   }
