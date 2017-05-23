@@ -234,7 +234,7 @@ void AES_decrypt(const uint8_t *in, uint8_t *out, const AES_KEY *key)
 
   assert(in && out && key);
 
-  if (!NT_IS_SUCCESS(status = BCryptEncrypt(key->bcrypt->hKey, (PUCHAR)in, (ULONG)(key->bcrypt->cbBlockLength), NULL, NULL, 0, (PUCHAR)out, (ULONG)(key->bcrypt->cbBlockLength), &result, 0))) {
+  if (!NT_IS_SUCCESS(status = BCryptDecrypt(key->bcrypt->hKey, (PUCHAR)in, (ULONG)(key->bcrypt->cbBlockLength), NULL, NULL, 0, (PUCHAR)out, (ULONG)(key->bcrypt->cbBlockLength), &result, 0))) {
     assert(0);
   }
 }
