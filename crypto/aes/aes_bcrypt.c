@@ -81,7 +81,9 @@ int AES_set_encrypt_key(const uint8_t *key, unsigned bits, AES_KEY *aeskey) {
   struct aes_key_bcrypt_st *bcrypt = NULL;
   NTSTATUS status = STATUS_UNSUCCESSFUL;
   DWORD    cbData = 0;
+#if 0
   BCRYPT_KEY_DATA_BLOB_HEADER *blobHeader = NULL;
+#endif /* 0 */
   ULONG keyBytes = (bits / 8) + (bits % 8 == 0 ? 0 : 1);
 
   if (!aeskey) {
@@ -165,6 +167,7 @@ int AES_set_encrypt_key(const uint8_t *key, unsigned bits, AES_KEY *aeskey) {
     goto Failure;
   }
 
+#if 0
   blobHeader = (BCRYPT_KEY_DATA_BLOB_HEADER *)OPENSSL_malloc(sizeof(BCRYPT_KEY_DATA_BLOB_HEADER) + keyBytes);
   if (NULL == blobHeader) {
     goto Failure;
@@ -174,21 +177,28 @@ int AES_set_encrypt_key(const uint8_t *key, unsigned bits, AES_KEY *aeskey) {
   blobHeader->dwVersion = BCRYPT_KEY_DATA_BLOB_VERSION1;
   blobHeader->cbKeyData = keyBytes;
   memcpy(&(((PBYTE)blobHeader)[sizeof(BCRYPT_KEY_DATA_BLOB_HEADER)]), key, keyBytes);
+#endif /* 0 */
 
+  if (!NT_IS_SUCCESS(status = BCryptGenerateSymmetricKey(aeskey->bcrypt->hAesAlg, &(aeskey->bcrypt->hKey), aeskey->bcrypt->pbKeyObject, aeskey->bcrypt->cbKeyObject, (PUCHAR)key, keyBytes, 0))) {
+    goto Failure;
+  }
+
+#if 0
   if (!NT_IS_SUCCESS(status = BCryptImportKey(
     aeskey->bcrypt->hAesAlg,
-    NULL, /* _In_opt_  BCRYPT_KEY_HANDLE hImportKey, */
+    NULL, /* _In_opt_ BCRYPT_KEY_HANDLE hImportKey, */
     BCRYPT_KEY_DATA_BLOB,
     &(aeskey->bcrypt->hKey),
     aeskey->bcrypt->pbKeyObject,
     aeskey->bcrypt->cbKeyObject,
     (PUCHAR)blobHeader,
     sizeof(BCRYPT_KEY_DATA_BLOB_HEADER) + keyBytes,
-    0 /* _In_      ULONG             dwFlags */
+    0 /* _In_ ULONG dwFlags */
   )))
   {
     goto Failure;
   }
+#endif /* 0 */
 
   result = 0;
   goto Cleanup;
@@ -201,10 +211,13 @@ Failure:
 
 Cleanup:
   {
+#if 0
+
     if (NULL != blobHeader) {
       OPENSSL_free(blobHeader);
       blobHeader = NULL;
     }
+#endif /* 0 */
   }
 
   return result;
