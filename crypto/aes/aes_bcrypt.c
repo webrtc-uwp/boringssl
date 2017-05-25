@@ -129,6 +129,12 @@ int AES_set_encrypt_key(const uint8_t *key, unsigned bits, AES_KEY *aeskey) {
     goto Failure;
   }
 
+  if (!NT_IS_SUCCESS(status = BCryptSetProperty(aeskey->bcrypt->hAesAlg, BCRYPT_CHAINING_MODE, (PBYTE)BCRYPT_CHAIN_MODE_ECB, sizeof(BCRYPT_CHAIN_MODE_ECB), 0)))
+  {
+    /* wprintf(L"**** Error 0x%x returned by BCryptGetProperty\n", status); */
+    goto Failure;
+  }
+
   if (!NT_IS_SUCCESS(status = BCryptGetProperty(
     aeskey->bcrypt->hAesAlg,
     BCRYPT_BLOCK_LENGTH,
