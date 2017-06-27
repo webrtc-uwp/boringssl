@@ -25,14 +25,6 @@ OPENSSL_MSVC_PRAGMA(warning(push, 3))
 #include <windows.h>
 OPENSSL_MSVC_PRAGMA(warning(pop))
 
-#ifdef WINRT
-//WinRT runtime doesn't support basic executables. Tests are using WinRT application as runner
-//and this project as a static library, so we need exclusive main function name.
-#define main boringSSL_thread_test_main
-// Some functions can be switch over to the ******Ex() version.
-#define WaitForSingleObject(a, b) WaitForSingleObjectEx(a, b, FALSE)
-#endif /* WINRT */
-
 typedef HANDLE thread_t;
 
 static DWORD WINAPI thread_run(LPVOID arg) {

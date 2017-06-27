@@ -95,15 +95,6 @@
 #include "../test/file_test.h"
 #include "../test/test_util.h"
 
-#ifdef WINRT
-// WinRT runtime doesn't support basic executables. Tests are using WinRT
-// application as runner and this project as a static library, so we need
-// exclusive main function name.
-extern "C" int boringSSL_bn_test_main(int argc, char *argv[]);
-#define main boringSSL_bn_test_main
-#endif //WINRT
-
-
 static int HexToBIGNUM(bssl::UniquePtr<BIGNUM> *out, const char *in) {
   BIGNUM *raw = NULL;
   int ret = BN_hex2bn(&raw, in);

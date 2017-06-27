@@ -23,13 +23,6 @@
 #include "../internal.h"
 #include "../test/test_util.h"
 
-#ifdef WINRT
-//WinRT runtime doesn't support basic executables. Tests are using WinRT application as runner
-//and this project as a static library, so we need exclusive main function name.
-#define main boringSSL_hkdf_test_main
-#endif /* WINRT */
-
-
 struct HKDFTestVector {
   const EVP_MD *(*md_func)(void);
   const uint8_t ikm[80];

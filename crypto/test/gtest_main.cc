@@ -39,7 +39,7 @@ class ErrorTestEventListener : public testing::EmptyTestEventListener {
 
 }  // namespace
 
-int main(int argc, char **argv) {
+int main(int argc, char *argv[]) {
   CRYPTO_library_init();
   testing::InitGoogleTest(&argc, argv);
   testing::UnitTest::GetInstance()->listeners().Append(

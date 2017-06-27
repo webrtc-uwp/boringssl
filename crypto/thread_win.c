@@ -26,10 +26,6 @@ OPENSSL_MSVC_PRAGMA(warning(pop))
 #include <openssl/mem.h>
 #include <openssl/type_check.h>
 
-#ifdef WINRT
-#define InitializeCriticalSectionAndSpinCount(a,b) InitializeCriticalSectionEx(a, b, 0)
-#endif /* WINRT */
-
 OPENSSL_COMPILE_ASSERT(sizeof(CRYPTO_MUTEX) >= sizeof(SRWLOCK),
                        CRYPTO_MUTEX_too_small);
 

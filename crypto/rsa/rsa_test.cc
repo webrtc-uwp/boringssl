@@ -70,15 +70,6 @@
 #include "../internal.h"
 #include "../test/test_util.h"
 
-#ifdef WINRT
-// WinRT runtime doesn't support basic executables. Tests are using WinRT
-// application as runner and this project as a static library, so we need
-// exclusive main function name.
-extern "C" int boringSSL_rsa_test_main(int argc, char *argv[]);
-#define main boringSSL_rsa_test_main
-#endif //WINRT
-
-
 // kPlaintext is a sample plaintext.
 static const uint8_t kPlaintext[] = "\x54\x85\x9b\x34\x2c\x49\xea\x2a";
 static const size_t kPlaintextLen = sizeof(kPlaintext) - 1;

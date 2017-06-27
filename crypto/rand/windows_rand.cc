@@ -16,7 +16,9 @@
 
 #if defined(OPENSSL_WINDOWS)
 
-#ifdef WINRT
+#ifndef WINUWP
+#error This file is not supported on non Windows UWP platforms.
+#endif /* WINUWP */
 
 #include <limits.h>
 #include <stdlib.h>
@@ -35,6 +37,5 @@ extern "C" void CRYPTO_sysrand(uint8_t *out, size_t requested) {
   CryptographicBuffer::CopyToByteArray(buffer, &array);
   memcpy_s(out, requested, array->Data, requested);
 }
-#endif // WINRT
 
 #endif  /* OPENSSL_WINDOWS */

@@ -21,15 +21,6 @@
 #include <openssl/err.h>
 #include <openssl/mem.h>
 
-#ifdef WINRT
-// WinRT runtime doesn't support basic executables. Tests are using WinRT
-// application as runner and this project as a static library, so we need
-// exclusive main function name.
-extern "C" int boringSSL_err_test_main(void);
-#define main boringSSL_err_test_main
-#endif //WINRT
-
-
 TEST(ErrTest, Overflow) {
   for (unsigned i = 0; i < ERR_NUM_ERRORS*2; i++) {
     ERR_put_error(1, 0 /* unused */, i+1, "test", 1);

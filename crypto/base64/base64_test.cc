@@ -24,15 +24,6 @@
 
 #include "../internal.h"
 
-#ifdef WINRT
-// WinRT runtime doesn't support basic executables. Tests are using WinRT
-// application as runner and this project as a static library, so we need
-// exclusive main function name.
-extern "C" int boringSSL_base64_test_main(void);
-#define main boringSSL_base64_test_main
-#endif //WINRT
-
-
 enum encoding_relation {
   // canonical indicates that the encoding is the expected encoding of the
   // input.
