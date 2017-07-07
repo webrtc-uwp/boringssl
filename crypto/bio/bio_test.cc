@@ -42,6 +42,7 @@ OPENSSL_MSVC_PRAGMA(warning(pop))
 
 #include "../internal.h"
 
+
 #if !defined(OPENSSL_WINDOWS)
 static int closesocket(int sock) {
   return close(sock);

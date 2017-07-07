@@ -63,6 +63,7 @@
 #include "internal.h"
 #include "../test/test_util.h"
 
+
 struct test_case {
   const char *key;
   const char *plaintext;

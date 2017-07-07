@@ -24,6 +24,7 @@
 
 #include "../internal.h"
 
+
 enum encoding_relation {
   // canonical indicates that the encoding is the expected encoding of the
   // input.
