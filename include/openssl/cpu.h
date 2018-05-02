@@ -116,6 +116,10 @@ static inline const uint32_t *OPENSSL_ia32cap_get(void) {
 // information in a form that's easier for assembly to use.
 OPENSSL_EXPORT char CRYPTO_is_NEON_capable_at_runtime(void);
 
+#if !defined(inline)
+#define inline __inline
+#endif
+
 // CRYPTO_is_NEON_capable returns true if the current CPU has a NEON unit. If
 // this is known statically then it returns one immediately.
 static inline int CRYPTO_is_NEON_capable(void) {

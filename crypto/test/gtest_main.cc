@@ -17,7 +17,7 @@
 #include "gtest_main.h"
 
 
-int main(int argc, char **argv) {
+int main(int argc, char *argv[]) {
   testing::InitGoogleTest(&argc, argv);
   bssl::SetupGoogleTest();
   return RUN_ALL_TESTS();

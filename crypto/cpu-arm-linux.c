@@ -14,7 +14,7 @@
 
 #include <openssl/cpu.h>
 
-#if defined(OPENSSL_ARM) && !defined(OPENSSL_STATIC_ARMCAP)
+#if !defined(_MSC_VER) && defined(OPENSSL_ARM) && !defined(OPENSSL_STATIC_ARMCAP)
 
 #include <errno.h>
 #include <fcntl.h>

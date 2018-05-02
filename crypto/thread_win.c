@@ -26,7 +26,6 @@ OPENSSL_MSVC_PRAGMA(warning(pop))
 #include <openssl/mem.h>
 #include <openssl/type_check.h>
 
-
 OPENSSL_COMPILE_ASSERT(sizeof(CRYPTO_MUTEX) >= sizeof(SRWLOCK),
                        CRYPTO_MUTEX_too_small);
 
@@ -146,7 +145,7 @@ static void NTAPI thread_local_destructor(PVOID module, DWORD reason,
 // if it's not already there. (E.g. if __declspec(thread) is not used). Force
 // a reference to p_thread_callback_boringssl to prevent whole program
 // optimization from discarding the variable.
-#ifdef _WIN64
+#if defined(_WIN64) || defined(_M_ARM)
 #pragma comment(linker, "/INCLUDE:_tls_used")
 #pragma comment(linker, "/INCLUDE:p_thread_callback_boringssl")
 #else
@@ -170,7 +169,7 @@ static void NTAPI thread_local_destructor(PVOID module, DWORD reason,
 // reference to this variable with a linker /INCLUDE:symbol pragma to ensure
 // that.) If this variable is discarded, the OnThreadExit function will never
 // be called.
-#ifdef _WIN64
+#if defined(_WIN64) || defined(_M_ARM)
 
 // .CRT section is merged with .rdata on x64 so it must be constant data.
 #pragma const_seg(".CRT$XLC")
