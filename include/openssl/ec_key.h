@@ -99,9 +99,6 @@ OPENSSL_EXPORT EC_KEY *EC_KEY_new_by_curve_name(int nid);
 // EC_KEY_free frees all the data owned by |key| and |key| itself.
 OPENSSL_EXPORT void EC_KEY_free(EC_KEY *key);
 
-// EC_KEY_copy sets |dst| equal to |src| and returns |dst| or NULL on error.
-OPENSSL_EXPORT EC_KEY *EC_KEY_copy(EC_KEY *dst, const EC_KEY *src);
-
 // EC_KEY_dup returns a fresh copy of |src| or NULL on error.
 OPENSSL_EXPORT EC_KEY *EC_KEY_dup(const EC_KEY *src);
 
@@ -116,8 +113,8 @@ OPENSSL_EXPORT int EC_KEY_is_opaque(const EC_KEY *key);
 OPENSSL_EXPORT const EC_GROUP *EC_KEY_get0_group(const EC_KEY *key);
 
 // EC_KEY_set_group sets the |EC_GROUP| object that |key| will use to |group|.
-// It returns one on success and zero otherwise. If |key| already has a group,
-// it is an error to change to a different one.
+// It returns one on success and zero if |key| is already configured with a
+// different group.
 OPENSSL_EXPORT int EC_KEY_set_group(EC_KEY *key, const EC_GROUP *group);
 
 // EC_KEY_get0_private_key returns a pointer to the private key inside |key|.

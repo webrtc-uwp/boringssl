@@ -240,10 +240,10 @@ OPENSSL_EXPORT int CBS_get_asn1_uint64(CBS *cbs, uint64_t *out);
 OPENSSL_EXPORT int CBS_get_asn1_bool(CBS *cbs, int *out);
 
 // CBS_get_optional_asn1 gets an optional explicitly-tagged element from |cbs|
-// tagged with |tag| and sets |*out| to its contents. If present and if
-// |out_present| is not NULL, it sets |*out_present| to one, otherwise zero. It
-// returns one on success, whether or not the element was present, and zero on
-// decode failure.
+// tagged with |tag| and sets |*out| to its contents, or ignores it if |out| is
+// NULL. If present and if |out_present| is not NULL, it sets |*out_present| to
+// one, otherwise zero. It returns one on success, whether or not the element
+// was present, and zero on decode failure.
 OPENSSL_EXPORT int CBS_get_optional_asn1(CBS *cbs, CBS *out, int *out_present,
                                          unsigned tag);
 
@@ -340,7 +340,7 @@ OPENSSL_EXPORT void CBB_zero(CBB *cbb);
 
 // CBB_init initialises |cbb| with |initial_capacity|. Since a |CBB| grows as
 // needed, the |initial_capacity| is just a hint. It returns one on success or
-// zero on error.
+// zero on allocation failure.
 OPENSSL_EXPORT int CBB_init(CBB *cbb, size_t initial_capacity);
 
 // CBB_init_fixed initialises |cbb| to write to |len| bytes at |buf|. Since

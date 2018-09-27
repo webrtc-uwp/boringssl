@@ -57,6 +57,7 @@
 #include <openssl/bn.h>
 
 #include <assert.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include <openssl/err.h>
@@ -306,6 +307,24 @@ static BN_ULONG bn_abs_sub_part_words(BN_ULONG *r, const BN_ULONG *a,
   return borrow;
 }
 
+int bn_abs_sub_consttime(BIGNUM *r, const BIGNUM *a, const BIGNUM *b,
+                         BN_CTX *ctx) {
+  int cl = a->width < b->width ? a->width : b->width;
+  int dl = a->width - b->width;
+  int r_len = a->width < b->width ? b->width : a->width;
+  BN_CTX_start(ctx);
+  BIGNUM *tmp = BN_CTX_get(ctx);
+  int ok = tmp != NULL &&
+           bn_wexpand(r, r_len) &&
+           bn_wexpand(tmp, r_len);
+  if (ok) {
+    bn_abs_sub_part_words(r->d, a->d, b->d, cl, dl, tmp->d);
+    r->width = r_len;
+  }
+  BN_CTX_end(ctx);
+  return ok;
+}
+
 // Karatsuba recursive multiplication algorithm
 // (cf. Knuth, The Art of Computer Programming, Vol. 2)
 
@@ -523,9 +542,9 @@ static void bn_mul_part_recursive(BN_ULONG *r, const BN_ULONG *a,
   assert(c == 0);
 }
 
-// bn_mul_impl implements |BN_mul| and |bn_mul_fixed|. Note this function breaks
-// |BIGNUM| invariants and may return a negative zero. This is handled by the
-// callers.
+// bn_mul_impl implements |BN_mul| and |bn_mul_consttime|. Note this function
+// breaks |BIGNUM| invariants and may return a negative zero. This is handled by
+// the callers.
 static int bn_mul_impl(BIGNUM *r, const BIGNUM *a, const BIGNUM *b,
                        BN_CTX *ctx) {
   int al = a->width;
@@ -628,7 +647,7 @@ int BN_mul(BIGNUM *r, const BIGNUM *a, const BIGNUM *b, BN_CTX *ctx) {
   return 1;
 }
 
-int bn_mul_fixed(BIGNUM *r, const BIGNUM *a, const BIGNUM *b, BN_CTX *ctx) {
+int bn_mul_consttime(BIGNUM *r, const BIGNUM *a, const BIGNUM *b, BN_CTX *ctx) {
   // Prevent negative zeros.
   if (a->neg || b->neg) {
     OPENSSL_PUT_ERROR(BN, BN_R_NEGATIVE_NUMBER);
@@ -638,11 +657,10 @@ int bn_mul_fixed(BIGNUM *r, const BIGNUM *a, const BIGNUM *b, BN_CTX *ctx) {
   return bn_mul_impl(r, a, b, ctx);
 }
 
-int bn_mul_small(BN_ULONG *r, size_t num_r, const BN_ULONG *a, size_t num_a,
-                 const BN_ULONG *b, size_t num_b) {
+void bn_mul_small(BN_ULONG *r, size_t num_r, const BN_ULONG *a, size_t num_a,
+                  const BN_ULONG *b, size_t num_b) {
   if (num_r != num_a + num_b) {
-    OPENSSL_PUT_ERROR(BN, ERR_R_SHOULD_NOT_HAVE_BEEN_CALLED);
-    return 0;
+    abort();
   }
   // TODO(davidben): Should this call |bn_mul_comba4| too? |BN_mul| does not
   // hit that code.
@@ -651,7 +669,6 @@ int bn_mul_small(BN_ULONG *r, size_t num_r, const BN_ULONG *a, size_t num_a,
   } else {
     bn_mul_normal(r, a, num_a, b, num_b);
   }
-  return 1;
 }
 
 // tmp must have 2*n words
@@ -773,7 +790,7 @@ int BN_mul_word(BIGNUM *bn, BN_ULONG w) {
   return 1;
 }
 
-int bn_sqr_fixed(BIGNUM *r, const BIGNUM *a, BN_CTX *ctx) {
+int bn_sqr_consttime(BIGNUM *r, const BIGNUM *a, BN_CTX *ctx) {
   int al = a->width;
   if (al <= 0) {
     r->width = 0;
@@ -832,7 +849,7 @@ err:
 }
 
 int BN_sqr(BIGNUM *r, const BIGNUM *a, BN_CTX *ctx) {
-  if (!bn_sqr_fixed(r, a, ctx)) {
+  if (!bn_sqr_consttime(r, a, ctx)) {
     return 0;
   }
 
@@ -840,10 +857,9 @@ int BN_sqr(BIGNUM *r, const BIGNUM *a, BN_CTX *ctx) {
   return 1;
 }
 
-int bn_sqr_small(BN_ULONG *r, size_t num_r, const BN_ULONG *a, size_t num_a) {
+void bn_sqr_small(BN_ULONG *r, size_t num_r, const BN_ULONG *a, size_t num_a) {
   if (num_r != 2 * num_a || num_a > BN_SMALL_MAX_WORDS) {
-    OPENSSL_PUT_ERROR(BN, ERR_R_SHOULD_NOT_HAVE_BEEN_CALLED);
-    return 0;
+    abort();
   }
   if (num_a == 4) {
     bn_sqr_comba4(r, a);
@@ -854,5 +870,4 @@ int bn_sqr_small(BN_ULONG *r, size_t num_r, const BN_ULONG *a, size_t num_a) {
     bn_sqr_normal(r, a, num_a, tmp);
     OPENSSL_cleanse(tmp, 2 * num_a * sizeof(BN_ULONG));
   }
-  return 1;
 }

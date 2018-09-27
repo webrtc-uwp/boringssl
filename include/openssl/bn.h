@@ -237,7 +237,8 @@ OPENSSL_EXPORT BIGNUM *BN_bin2bn(const uint8_t *in, size_t len, BIGNUM *ret);
 
 // BN_bn2bin serialises the absolute value of |in| to |out| as a big-endian
 // integer, which must have |BN_num_bytes| of space available. It returns the
-// number of bytes written.
+// number of bytes written. Note this function leaks the magnitude of |in|. If
+// |in| is secret, use |BN_bn2bin_padded| instead.
 OPENSSL_EXPORT size_t BN_bn2bin(const BIGNUM *in, uint8_t *out);
 
 // BN_le2bn sets |*ret| to the value of |len| bytes from |in|, interpreted as
@@ -493,7 +494,12 @@ OPENSSL_EXPORT int BN_clear_bit(BIGNUM *a, int n);
 OPENSSL_EXPORT int BN_is_bit_set(const BIGNUM *a, int n);
 
 // BN_mask_bits truncates |a| so that it is only |n| bits long. It returns one
-// on success or zero if |n| is greater than the length of |a| already.
+// on success or zero if |n| is negative.
+//
+// This differs from OpenSSL which additionally returns zero if |a|'s word
+// length is less than or equal to |n|, rounded down to a number of words. Note
+// word size is platform-dependent, so this behavior is also difficult to rely
+// on in OpenSSL and not very useful.
 OPENSSL_EXPORT int BN_mask_bits(BIGNUM *a, int n);
 
 // BN_count_low_zero_bits returns the number of low-order zero bits in |bn|, or
@@ -653,8 +659,7 @@ struct bn_gencb_st {
 // BN_GENCB_set configures |callback| to call |f| and sets |callout->arg| to
 // |arg|.
 OPENSSL_EXPORT void BN_GENCB_set(BN_GENCB *callback,
-                                 int (*f)(int event, int n,
-                                          struct bn_gencb_st *),
+                                 int (*f)(int event, int n, BN_GENCB *),
                                  void *arg);
 
 // BN_GENCB_call calls |callback|, if not NULL, and returns the return value of
@@ -695,12 +700,15 @@ enum bn_primality_result_t {
 // Miller-Rabin tests primality for odd integers greater than 3, returning
 // |bn_probably_prime| if the number is probably prime,
 // |bn_non_prime_power_composite| if the number is a composite that is not the
-// power of a single prime, and |bn_composite| otherwise.  If |iterations| is
-// |BN_prime_checks|, then a value that results in a false positive rate lower
-// than the number-field sieve security level of |w| is used. It returns one on
+// power of a single prime, and |bn_composite| otherwise. It returns one on
 // success and zero on failure. If |cb| is not NULL, then it is called during
 // each iteration of the primality test.
-int BN_enhanced_miller_rabin_primality_test(
+//
+// If |iterations| is |BN_prime_checks|, then a value that results in a false
+// positive rate lower than the number-field sieve security level of |w| is
+// used, provided |w| was generated randomly. |BN_prime_checks| is not suitable
+// for inputs potentially crafted by an adversary.
+OPENSSL_EXPORT int BN_enhanced_miller_rabin_primality_test(
     enum bn_primality_result_t *out_result, const BIGNUM *w, int iterations,
     BN_CTX *ctx, BN_GENCB *cb);
 
@@ -712,13 +720,14 @@ int BN_enhanced_miller_rabin_primality_test(
 // list of small primes before Miller-Rabin tests. The probability of this
 // function returning a false positive is 2^{2*checks}. If |checks| is
 // |BN_prime_checks| then a value that results in a false positive rate lower
-// than the number-field sieve security level of |candidate| is used. If |cb| is
-// not NULL then it is called during the checking process. See the comment above
-// |BN_GENCB|.
+// than the number-field sieve security level of |candidate| is used, provided
+// |candidate| was generated randomly. |BN_prime_checks| is not suitable for
+// inputs potentially crafted by an adversary.
+//
+// If |cb| is not NULL then it is called during the checking process. See the
+// comment above |BN_GENCB|.
 //
 // The function returns one on success and zero on error.
-//
-// (If you are unsure whether you want |do_trial_division|, don't set it.)
 OPENSSL_EXPORT int BN_primality_test(int *is_probably_prime,
                                      const BIGNUM *candidate, int checks,
                                      BN_CTX *ctx, int do_trial_division,
@@ -731,7 +740,10 @@ OPENSSL_EXPORT int BN_primality_test(int *is_probably_prime,
 // list of small primes before Miller-Rabin tests. The probability of this
 // function returning one when |candidate| is composite is 2^{2*checks}. If
 // |checks| is |BN_prime_checks| then a value that results in a false positive
-// rate lower than the number-field sieve security level of |candidate| is used.
+// rate lower than the number-field sieve security level of |candidate| is used,
+// provided |candidate| was generated randomly. |BN_prime_checks| is not
+// suitable for inputs potentially crafted by an adversary.
+//
 // If |cb| is not NULL then it is called during the checking process. See the
 // comment above |BN_GENCB|.
 //
@@ -773,6 +785,10 @@ OPENSSL_EXPORT BIGNUM *BN_mod_inverse(BIGNUM *out, const BIGNUM *a,
 // value) to protect it against side-channel attacks. On failure, if the failure
 // was caused by |a| having no inverse mod |n| then |*out_no_inverse| will be
 // set to one; otherwise it will be set to zero.
+//
+// Note this function may incorrectly report |a| has no inverse if the random
+// blinding value has no inverse. It should only be used when |n| has few
+// non-invertible elements, such as an RSA modulus.
 int BN_mod_inverse_blinded(BIGNUM *out, int *out_no_inverse, const BIGNUM *a,
                            const BN_MONT_CTX *mont, BN_CTX *ctx);
 
@@ -795,9 +811,14 @@ int BN_mod_inverse_odd(BIGNUM *out, int *out_no_inverse, const BIGNUM *a,
 // Montgomery domain.
 
 // BN_MONT_CTX_new_for_modulus returns a fresh |BN_MONT_CTX| given the modulus,
-// |mod| or NULL on error.
+// |mod| or NULL on error. Note this function assumes |mod| is public.
 OPENSSL_EXPORT BN_MONT_CTX *BN_MONT_CTX_new_for_modulus(const BIGNUM *mod,
                                                         BN_CTX *ctx);
+
+// BN_MONT_CTX_new_consttime behaves like |BN_MONT_CTX_new_for_modulus| but
+// treats |mod| as secret.
+OPENSSL_EXPORT BN_MONT_CTX *BN_MONT_CTX_new_consttime(const BIGNUM *mod,
+                                                      BN_CTX *ctx);
 
 // BN_MONT_CTX_free frees memory associated with |mont|.
 OPENSSL_EXPORT void BN_MONT_CTX_free(BN_MONT_CTX *mont);
@@ -809,7 +830,8 @@ OPENSSL_EXPORT BN_MONT_CTX *BN_MONT_CTX_copy(BN_MONT_CTX *to,
 
 // BN_MONT_CTX_set_locked takes |lock| and checks whether |*pmont| is NULL. If
 // so, it creates a new |BN_MONT_CTX| and sets the modulus for it to |mod|. It
-// then stores it as |*pmont|. It returns one on success and zero on error.
+// then stores it as |*pmont|. It returns one on success and zero on error. Note
+// this function assumes |mod| is public.
 //
 // If |*pmont| is already non-NULL then it does nothing and returns one.
 int BN_MONT_CTX_set_locked(BN_MONT_CTX **pmont, CRYPTO_MUTEX *lock,
@@ -852,10 +874,14 @@ OPENSSL_EXPORT int BN_exp(BIGNUM *r, const BIGNUM *a, const BIGNUM *p,
 OPENSSL_EXPORT int BN_mod_exp(BIGNUM *r, const BIGNUM *a, const BIGNUM *p,
                               const BIGNUM *m, BN_CTX *ctx);
 
+// BN_mod_exp_mont behaves like |BN_mod_exp| but treats |a| as secret and
+// requires 0 <= |a| < |m|.
 OPENSSL_EXPORT int BN_mod_exp_mont(BIGNUM *r, const BIGNUM *a, const BIGNUM *p,
                                    const BIGNUM *m, BN_CTX *ctx,
                                    const BN_MONT_CTX *mont);
 
+// BN_mod_exp_mont_consttime behaves like |BN_mod_exp| but treats |a|, |p|, and
+// |m| as secret and requires 0 <= |a| < |m|.
 OPENSSL_EXPORT int BN_mod_exp_mont_consttime(BIGNUM *rr, const BIGNUM *a,
                                              const BIGNUM *p, const BIGNUM *m,
                                              BN_CTX *ctx,
@@ -935,9 +961,10 @@ struct bignum_st {
 };
 
 struct bn_mont_ctx_st {
-  // RR is R^2, reduced modulo |N|. It is used to convert to Montgomery form.
+  // RR is R^2, reduced modulo |N|. It is used to convert to Montgomery form. It
+  // is guaranteed to have the same width as |N|.
   BIGNUM RR;
-  // N is the modulus. It is always stored in minimal form, so |N.top|
+  // N is the modulus. It is always stored in minimal form, so |N.width|
   // determines R.
   BIGNUM N;
   BN_ULONG n0[2];  // least significant words of (R*Ri-1)/N
