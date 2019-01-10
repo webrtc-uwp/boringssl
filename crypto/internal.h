@@ -617,7 +617,7 @@ static inline uint32_t CRYPTO_bswap4(uint32_t x) {
 static inline uint64_t CRYPTO_bswap8(uint64_t x) {
   return __builtin_bswap64(x);
 }
-#elif defined(_MSC_VER)
+#elif defined(COMPILER_MSVC)
 OPENSSL_MSVC_PRAGMA(warning(push, 3))
 #include <intrin.h>
 OPENSSL_MSVC_PRAGMA(warning(pop))
