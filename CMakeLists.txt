@@ -20,6 +20,11 @@ include(sources.cmake)
 enable_language(C)
 enable_language(CXX)
 
+# This is a dummy target which all other targets depend on (manually - see other
+# CMakeLists.txt files). This gives us a hook to add any targets which need to
+# run before all other targets.
+add_custom_target(global_target)
+
 if(ANDROID)
   # Android-NDK CMake files reconfigure the path and so Go and Perl won't be
   # found. However, ninja will still find them in $PATH if we just name them.
@@ -34,6 +39,20 @@ else()
   find_program(GO_EXECUTABLE go)
 endif()
 
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT CMAKE_CROSSCOMPILING)
+  find_package(PkgConfig QUIET)
+  if (PkgConfig_FOUND)
+    pkg_check_modules(LIBUNWIND libunwind-generic)
+    if(LIBUNWIND_FOUND)
+      add_definitions(-DBORINGSSL_HAVE_LIBUNWIND)
+    else()
+      message("libunwind not found. Disabling unwind tests.")
+    endif()
+  else()
+    message("pkgconfig not found. Disabling unwind tests.")
+  endif()
+endif()
+
 if(NOT GO_EXECUTABLE)
   message(FATAL_ERROR "Could not find Go")
 endif()
@@ -41,8 +60,50 @@ endif()
 if(USE_CUSTOM_LIBCXX)
   set(BORINGSSL_ALLOW_CXX_RUNTIME 1)
 endif()
+
 if(BORINGSSL_ALLOW_CXX_RUNTIME)
   add_definitions(-DBORINGSSL_ALLOW_CXX_RUNTIME)
+endif()
+
+if(CMAKE_BUILD_TYPE STREQUAL "Release")
+  # Windows release builds don't set NDEBUG in NASM flags automatically.
+  set(CMAKE_ASM_NASM_FLAGS "${CMAKE_ASM_NASM_FLAGS} -DNDEBUG")
+endif()
+
+# Add a RelWithAsserts build configuration. It is the same as Release, except it
+# does not define NDEBUG, so asserts run.
+foreach(VAR CMAKE_C_FLAGS CMAKE_CXX_FLAGS CMAKE_ASM_FLAGS)
+  string(REGEX REPLACE "(^| )[/-]DNDEBUG( |$)" " " "${VAR}_RELWITHASSERTS"
+         "${${VAR}_RELEASE}")
+endforeach()
+
+if(BORINGSSL_PREFIX AND BORINGSSL_PREFIX_SYMBOLS)
+  add_definitions(-DBORINGSSL_PREFIX=${BORINGSSL_PREFIX})
+  # CMake automatically connects include_directories to the NASM command-line,
+  # but not add_definitions.
+  set(CMAKE_ASM_NASM_FLAGS "${CMAKE_ASM_NASM_FLAGS} -DBORINGSSL_PREFIX=${BORINGSSL_PREFIX}")
+
+  # Use "symbol_prefix_include" to store generated header files
+  include_directories(${CMAKE_CURRENT_BINARY_DIR}/symbol_prefix_include)
+  add_custom_command(
+    OUTPUT symbol_prefix_include/boringssl_prefix_symbols.h
+           symbol_prefix_include/boringssl_prefix_symbols_asm.h
+           symbol_prefix_include/boringssl_prefix_symbols_nasm.inc
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/symbol_prefix_include
+    COMMAND ${GO_EXECUTABLE} run ${CMAKE_CURRENT_SOURCE_DIR}/util/make_prefix_headers.go -out ${CMAKE_CURRENT_BINARY_DIR}/symbol_prefix_include ${BORINGSSL_PREFIX_SYMBOLS}
+    DEPENDS util/make_prefix_headers.go
+            ${CMAKE_BINARY_DIR}/${BORINGSSL_PREFIX_SYMBOLS})
+
+  # add_dependencies needs a target, not a file, so we add an intermediate
+  # target.
+  add_custom_target(
+    boringssl_prefix_symbols
+    DEPENDS symbol_prefix_include/boringssl_prefix_symbols.h
+            symbol_prefix_include/boringssl_prefix_symbols_asm.h
+            symbol_prefix_include/boringssl_prefix_symbols_nasm.inc)
+  add_dependencies(global_target boringssl_prefix_symbols)
+elseif(BORINGSSL_PREFIX OR BORINGSSL_PREFIX_SYMBOLS)
+  message(FATAL_ERROR "Must specify both or neither of BORINGSSL_PREFIX and BORINGSSL_PREFIX_SYMBOLS")
 endif()
 
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
@@ -143,6 +204,7 @@ elseif(MSVC)
               # copy constructor is inaccessible or deleted
       "C4626" # assignment operator could not be generated because a base class
               # assignment operator is inaccessible or deleted
+      "C4628" # digraphs not supported with -Ze
       "C4668" # 'symbol' is not defined as a preprocessor macro, replacing with
               # '0' for 'directives'
               # Disable this because GTest uses it everywhere.
@@ -206,6 +268,10 @@ if(FUZZ)
     message(FATAL_ERROR "You need to build with Clang for fuzzing to work")
   endif()
 
+  if(CMAKE_C_COMPILER_VERSION VERSION_LESS "6.0.0")
+    message(FATAL_ERROR "You need Clang ≥ 6.0.0")
+  endif()
+
   add_definitions(-DBORINGSSL_UNSAFE_DETERMINISTIC_MODE)
   set(RUNNER_ARGS "-deterministic")
 
@@ -214,10 +280,8 @@ if(FUZZ)
     set(RUNNER_ARGS ${RUNNER_ARGS} "-fuzzer" "-shim-config" "fuzzer_mode.json")
   endif()
 
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsanitize=address -fsanitize-coverage=edge,indirect-calls,trace-pc-guard")
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address -fsanitize-coverage=edge,indirect-calls,trace-pc-guard")
-  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=address")
-  link_directories(.)
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsanitize=address,fuzzer-no-link -fsanitize-coverage=edge,indirect-calls")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address,fuzzer-no-link -fsanitize-coverage=edge,indirect-calls")
 endif()
 
 add_definitions(-DBORINGSSL_IMPLEMENTATION)
@@ -240,7 +304,7 @@ if(MSAN)
 
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsanitize=memory -fsanitize-memory-track-origins -fno-omit-frame-pointer")
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=memory -fsanitize-memory-track-origins -fno-omit-frame-pointer")
-  set(OPENSSL_NO_ASM "1")
+  set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} -fsanitize=memory -fsanitize-memory-track-origins -fno-omit-frame-pointer")
 endif()
 
 if(ASAN)
@@ -250,7 +314,6 @@ if(ASAN)
 
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsanitize=address -fsanitize-address-use-after-scope -fno-omit-frame-pointer")
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address -fsanitize-address-use-after-scope -fno-omit-frame-pointer")
-  set(OPENSSL_NO_ASM "1")
 endif()
 
 if(CFI)
@@ -258,9 +321,8 @@ if(CFI)
     message(FATAL_ERROR "Cannot enable CFI unless using Clang")
   endif()
 
-  # TODO(crbug.com/785442): Remove -fsanitize-cfi-icall-generalize-pointers.
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsanitize=cfi -fno-sanitize-trap=cfi -fsanitize-cfi-icall-generalize-pointers -flto=thin")
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=cfi -fno-sanitize-trap=cfi -fsanitize-cfi-icall-generalize-pointers -flto=thin")
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsanitize=cfi -fno-sanitize-trap=cfi -flto=thin")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=cfi -fno-sanitize-trap=cfi -flto=thin")
   # We use Chromium's copy of clang, which requires -fuse-ld=lld if building
   # with -flto. That, in turn, can't handle -ggdb.
   set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fuse-ld=lld")
@@ -279,6 +341,22 @@ if(TSAN)
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsanitize=thread")
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=thread")
   set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=thread")
+endif()
+
+if(UBSAN)
+  if(NOT CLANG)
+    message(FATAL_ERROR "Cannot enable UBSAN unless using Clang")
+  endif()
+
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsanitize=undefined")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=undefined")
+  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=undefined")
+
+  if(NOT UBSAN_RECOVER)
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fno-sanitize-recover=undefined")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-sanitize-recover=undefined")
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fno-sanitize-recover=undefined")
+  endif()
 endif()
 
 if(GCOV)
@@ -300,6 +378,49 @@ endif()
 if(OPENSSL_SMALL)
   add_definitions(-DOPENSSL_SMALL)
 endif()
+
+if(CONSTANT_TIME_VALIDATION)
+  add_definitions(-DBORINGSSL_CONSTANT_TIME_VALIDATION)
+  # Asserts will often test secret data.
+  add_definitions(-DNDEBUG)
+endif()
+
+function(go_executable dest package)
+  set(godeps "${CMAKE_SOURCE_DIR}/util/godeps.go")
+  if(${CMAKE_VERSION} VERSION_LESS "3.7" OR
+     NOT ${CMAKE_GENERATOR} STREQUAL "Ninja")
+    # The DEPFILE parameter to add_custom_command is new as of CMake 3.7 and
+    # only works with Ninja. Query the sources at configure time. Additionally,
+    # everything depends on go.mod. That affects what external packages to use.
+    execute_process(COMMAND ${GO_EXECUTABLE} run ${godeps} -format cmake
+                            -pkg ${package}
+                    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+                    OUTPUT_VARIABLE sources
+                    RESULT_VARIABLE godeps_result)
+    add_custom_command(OUTPUT ${dest}
+                       COMMAND ${GO_EXECUTABLE} build
+                               -o ${CMAKE_CURRENT_BINARY_DIR}/${dest} ${package}
+                       WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+                       DEPENDS ${sources} ${CMAKE_SOURCE_DIR}/go.mod)
+  else()
+    # Ninja expects the target in the depfile to match the output. This is a
+    # relative path from the build directory.
+    string(LENGTH "${CMAKE_BINARY_DIR}" root_dir_length)
+    math(EXPR root_dir_length "${root_dir_length} + 1")
+    string(SUBSTRING "${CMAKE_CURRENT_BINARY_DIR}" ${root_dir_length} -1 target)
+    set(target "${target}/${dest}")
+
+    set(depfile "${CMAKE_CURRENT_BINARY_DIR}/${dest}.d")
+    add_custom_command(OUTPUT ${dest}
+                       COMMAND ${GO_EXECUTABLE} build
+                               -o ${CMAKE_CURRENT_BINARY_DIR}/${dest} ${package}
+                       COMMAND ${GO_EXECUTABLE} run ${godeps} -format depfile
+                               -target ${target} -pkg ${package} -out ${depfile}
+                       WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+                       DEPENDS ${godeps} ${CMAKE_SOURCE_DIR}/go.mod
+                       DEPFILE ${depfile})
+  endif()
+endfunction()
 
 # CMake's iOS support uses Apple's multiple-architecture toolchain. It takes an
 # architecture list from CMAKE_OSX_ARCHITECTURES, leaves CMAKE_SYSTEM_PROCESSOR
@@ -338,6 +459,9 @@ elseif(${CMAKE_SYSTEM_PROCESSOR} STREQUAL "i686")
 elseif(${CMAKE_SYSTEM_PROCESSOR} STREQUAL "aarch64")
   set(ARCH "aarch64")
 elseif(${CMAKE_SYSTEM_PROCESSOR} STREQUAL "arm64")
+  set(ARCH "aarch64")
+# Apple A12 Bionic chipset which is added in iPhone XS/XS Max/XR uses arm64e architecture.
+elseif(${CMAKE_SYSTEM_PROCESSOR} STREQUAL "arm64e")
   set(ARCH "aarch64")
 elseif(${CMAKE_SYSTEM_PROCESSOR} MATCHES "^arm*")
   set(ARCH "arm")
@@ -440,7 +564,6 @@ add_custom_command(
 add_library(crypto_test_data OBJECT crypto_test_data.cc)
 
 add_subdirectory(crypto)
-add_subdirectory(third_party/fiat)
 add_subdirectory(ssl)
 add_subdirectory(ssl/test)
 add_subdirectory(fipstools)
