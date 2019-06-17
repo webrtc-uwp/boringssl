@@ -34,6 +34,20 @@ OPENSSL_MSVC_PRAGMA(warning(pop))
 
 #include "../fipsmodule/rand/internal.h"
 
+#ifdef WINUWP
+#include <bcrypt.h>
+
+#define UWP_COMPAT_NT_INFORMATION(xStatus) \
+  (((xStatus) >= 0x40000000) && ((xStatus) <= 0x7FFFFFFF))
+
+#define UWP_COMPAT_NT_SUCCESS(xStatus) \
+  ((((xStatus) >= 0) && ((xStatus) <= 0x3FFFFFFF)) || UWP_COMPAT_NT_INFORMATION(xStatus))
+
+static int checkSuccess(NTSTATUS status)
+{
+  return UWP_COMPAT_NT_SUCCESS(status);
+}
+#endif //WINUWP
 
 void CRYPTO_sysrand(uint8_t *out, size_t requested) {
   while (requested > 0) {
@@ -41,7 +55,11 @@ void CRYPTO_sysrand(uint8_t *out, size_t requested) {
     if (requested < output_bytes_this_pass) {
       output_bytes_this_pass = (ULONG)requested;
     }
+#ifdef WINUWP
+    if (!UWP_checkSuccess(BCryptGenRandom(NULL, (PUCHAR)out, output_bytes_this_pass, BCRYPT_USE_SYSTEM_PREFERRED_RNG))) {
+#else
     if (RtlGenRandom(out, output_bytes_this_pass) == FALSE) {
+#endif /* WINUWP */
       abort();
     }
     requested -= output_bytes_this_pass;
