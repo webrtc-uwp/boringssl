@@ -56,7 +56,7 @@ void CRYPTO_sysrand(uint8_t *out, size_t requested) {
       output_bytes_this_pass = (ULONG)requested;
     }
 #ifdef WINUWP
-    if (!UWP_checkSuccess(BCryptGenRandom(NULL, (PUCHAR)out, output_bytes_this_pass, BCRYPT_USE_SYSTEM_PREFERRED_RNG))) {
+    if (!checkSuccess(BCryptGenRandom(NULL, (PUCHAR)out, output_bytes_this_pass, BCRYPT_USE_SYSTEM_PREFERRED_RNG))) {
 #else
     if (RtlGenRandom(out, output_bytes_this_pass) == FALSE) {
 #endif /* WINUWP */
